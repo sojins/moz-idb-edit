@@ -1,12 +1,12 @@
-"""A SpiderMonkey StructuredClone object read for Python."""
+"""A SpiderMonkey StructuredClone object reader for Python."""
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 # Credits:
 #   – Source was havily inspired by
-#   https://dxr.mozilla.org/mozilla-central/rev/3bc0d683a41cb63c83cb115d1b6a85d50013d59e/js/src/vm/StructuredClone.cpp
+#     https://dxr.mozilla.org/mozilla-central/rev/3bc0d683a41cb63c83cb115d1b6a85d50013d59e/js/src/vm/StructuredClone.cpp
 #     and many helpful comments were copied as-is.
-#   – Python source code by Alexander Schlarb in 2020.
+#   – Python source code by Alexander Schlarb, 2020.
 
 import collections
 import datetime

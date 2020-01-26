@@ -1,3 +1,12 @@
+"""Mozilla IndexedDB object database tools for Python."""
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# Credits:
+#   – Source was havily inspired by
+#     https://dxr.mozilla.org/mozilla-central/rev/3bc0d683a41cb63c83cb115d1b6a85d50013d59e/dom/indexedDB/Key.cpp
+#   – Python source code by Alexander Schlarb, 2020.
+
 import datetime
 import enum
 import math
