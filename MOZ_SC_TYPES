@@ -1,0 +1,20 @@
++--------------------------+---------------------+
+| JS Type                  | Python Type         |
++--------------------------+---------------------+
+| null                     | None                |
+| undefined                | NotImplemented      |
+| Int32 (primitive)        | JSInt32 → int       |
+| boolean (primitive)      | bool                |
+| Boolean (object)         | JSBooleanObj → bool |
+| string (primitive)       | str                 |
+| String (object)          | JSStringObj → str   |
+| number (primitive)       | float               |
+| Number (object)          | JSNumberObj → float |
+| bigint (primitive)       | int                 |
+| BigInt (object)          | JSBigIntObj → int   |
+| Date                     | datetime.datetime   |
+| RegExp                   | JSRegExpObj         |
+| Array                    | list                |
+| Object                   | dict                |
+| Map                      | JSMapObj            |
+| Set                      | JSSetObj (TODO!)    |

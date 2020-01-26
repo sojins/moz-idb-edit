@@ -1,0 +1,147 @@
+#!/usr/bin/python3
+"""Do something useful."""
+import argparse
+import json
+import pathlib
+import pprint
+import re
+import os
+import sys
+import typing
+
+import mozidb
+
+__dir__ = pathlib.Path(__file__).parent
+__version__ = "0.1.0"
+
+
+USER_CONTEXT_WEB_EXT = "userContextIdInternal.webextStorageLocal"
+
+
+# Based on https://stackoverflow.com/a/24563687/277882
+USER_PREF_RE = re.compile(rb"\s*user_pref\(([\"'])(.+?)\1,\s*(.+?)\);")
+def read_user_prefs(prefs_path: os.PathLike):
+	try:
+		with open(prefs_path, "rb") as file:
+			for line_no, line in enumerate(file, 1):
+				m = USER_PREF_RE.match(line)
+				if not m:
+					continue
+				k, v = m.group(2), m.group(3)
+				try:
+					k = k.decode("utf-8")
+					v = json.loads(v)
+				except (ValueError, UnicodeDecodeError) as exc:
+					print(f"Failed to parse {prefs_path}:{line_no}: {type(exc).__name__}: {exc}", file=sys.stderr)
+				else:
+					yield k, v
+	except FileNotFoundError:
+		pass
+
+
+def read_user_contexts(profile_dir: pathlib.Path):
+	try:
+		with open(profile_dir / "containers.json", "rb") as file:
+			data = json.load(file)
+		
+		assert data["version"] == 4
+		
+		for identity in data["identities"]:
+			name = identity.get("name")
+			if name is None:
+				name = identity["l10nID"].split(".", 1)[0]
+				if name.startswith("userContext"):
+					name = name[11:]
+			
+			yield int(identity["userContextId"]), name
+	except (AssertionError, FileNotFoundError, ValueError) as exc:
+		print(f"Failed to parse {profile_dir}/containers.json: {type(exc).__name__}: {exc}", file=sys.stderr)
+		return 4294967295
+
+
+def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str) -> typing.Optional[str]:
+	for name, value in read_user_prefs(profile_dir / "prefs.js"):
+		if name == "extensions.webextensions.uuids":
+			try:
+				value = json.loads(value)
+				return value.get(ext_id, None)
+			except ValueError:
+				pass
+
+
+def find_context_id_by_name(profile_dir: pathlib.Path, name: str) -> int:
+	for ctx_id, ctx_name in read_user_contexts(profile_dir):
+		if ctx_name == name:
+			return ctx_id
+	
+	if name == USER_CONTEXT_WEB_EXT:
+		return 4294967295  # Default value (-1 as unsigned 32-value)
+	else:
+		raise KeyError(name)
+
+
+def main(argv=sys.argv[1:], program=sys.argv[0]):
+	parser = argparse.ArgumentParser(description=__doc__, prog=pathlib.Path(program).name)
+	parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
+	parser.add_argument("-x", "--extension", action="store", metavar="EXT_ID",
+	                    help="Use database of the extension with the given Extension ID.")
+	parser.add_argument("--dbpath", action="store", metavar="DB_PATH", type=pathlib.Path,
+	                    help="Use database file with the the given path.")
+	parser.add_argument("--userctx", action="store",
+	                    help="Use given user context (“Firefox container”) "
+	                         "when determining the database path.")
+	parser.add_argument("-profile", "--profile", metavar="PROFILE", type=pathlib.Path,
+	                    help="Path to the Firefox/MozTK application profile directory.")
+	parser.add_argument("key_name", metavar="KEY")
+	
+	args = parser.parse_args(argv)
+	
+	if (int(bool(args.dbpath)) + int(bool(args.extension))) != 1:
+		parser.error("Exactly one of --dbpath or --extension must be used")
+		return 1
+	
+	ctx_id = 0  # Use default
+	if args.userctx:
+		try:
+			ctx_id = int(args.userctx)
+		except ValueError:
+			ctx_id = find_context_id_by_name(args.profile_dir, args.userctx)
+		
+	
+	# Collect required extra data for figuring out extension paths
+	if args.extension:
+		if not args.profile:
+			parser.error("Argument --profile is required for --extension")
+			return 1
+		
+		# Map extension ID to browser internal UUID
+		ext_uuid = find_uuid_by_ext_id(args.profile, args.extension)
+		if ext_uuid is None:
+			print(f"Failed to look up internal UUID for extension ID: {ext_id} (is the extension installed?)", file=sys.stderr)
+			return 1
+		
+		# Use special extension storage ID if no other was set
+		if args.userctx is None:
+			ctx_id = find_context_id_by_name(args.profile, USER_CONTEXT_WEB_EXT)
+		
+		origin_label = f"moz-extension+++{ext_uuid}"
+	
+	if args.dbpath:
+		db_path = args.dbpath
+	else:
+		if ctx_id:
+			origin_label += f"^userContextId={ctx_id}"
+		
+		db_path = args.profile / "storage" / "default" / origin_label	
+		db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
+	
+	print(f"Using database path: {db_path}")
+	
+	with mozidb.IndexedDB(db_path) as conn:
+		pprint.pprint(conn.read_object(args.key_name))
+	
+	return 0
+
+
+if __name__ == "__main__":
+	sys.exit(main())
