@@ -103,6 +103,131 @@ class IDBObjectWrapper(collections.abc.Mapping):
 		return sum(1 for _ in self)
 
 
+def _safe_repr(object, context, maxlevels, level, sort_dicts):
+	"""A repr function that returns more JSON-like output for primitive types
+	
+	Code copied from Python 3.9 stdlib pprint.py module.
+	"""
+	typ = type(object)
+	if typ in _builtin_scalars:
+		# This is the entire actual patch: Use the JSON library to generate
+		# `repr` for all primitive types
+		return json.dumps(object, ensure_ascii=False), True, False
+	
+	r = getattr(typ, "__repr__", None)
+	if issubclass(typ, dict) and r is dict.__repr__:
+		if not object:
+			return "{}", True, False
+		objid = id(object)
+		if maxlevels and level >= maxlevels:
+			return "{...}", False, objid in context
+		if objid in context:
+			return _recursion(object), False, True
+		context[objid] = 1
+		readable = True
+		recursive = False
+		components = []
+		append = components.append
+		level += 1
+		if sort_dicts:
+			items = sorted(object.items(), key=_safe_tuple)
+		else:
+			items = object.items()
+		for k, v in items:
+			krepr, kreadable, krecur = _safe_repr(k, context, maxlevels, level, sort_dicts)
+			vrepr, vreadable, vrecur = _safe_repr(v, context, maxlevels, level, sort_dicts)
+			append("%s: %s" % (krepr, vrepr))
+			readable = readable and kreadable and vreadable
+			if krecur or vrecur:
+				recursive = True
+		del context[objid]
+		return "{%s}" % ", ".join(components), readable, recursive
+	
+	if (issubclass(typ, list) and r is list.__repr__) or \
+	   (issubclass(typ, tuple) and r is tuple.__repr__):
+		if issubclass(typ, list):
+			if not object:
+				return "[]", True, False
+			format = "[%s]"
+		elif len(object) == 1:
+			format = "(%s,)"
+		else:
+			if not object:
+				return "()", True, False
+			format = "(%s)"
+		objid = id(object)
+		if maxlevels and level >= maxlevels:
+			return format % "...", False, objid in context
+		if objid in context:
+			return _recursion(object), False, True
+		context[objid] = 1
+		readable = True
+		recursive = False
+		components = []
+		append = components.append
+		level += 1
+		for o in object:
+			orepr, oreadable, orecur = _safe_repr(o, context, maxlevels, level, sort_dicts)
+			append(orepr)
+			if not oreadable:
+				readable = False
+			if orecur:
+				recursive = True
+		del context[objid]
+		return format % ", ".join(components), readable, recursive
+	
+	rep = repr(object)
+	return rep, (rep and not rep.startswith('<')), False
+
+_builtin_scalars = frozenset({str, bytes, bytearray, int, float, complex,
+                              bool, type(None)})
+
+def _recursion(object):
+	return ("<Recursion on %s with id=%s>"
+	        % (type(object).__name__, id(object)))
+
+class _safe_key:
+	"""Helper function for key functions when sorting unorderable objects.
+	
+	The wrapped-object will fallback to a Py2.x style comparison for
+	unorderable types (sorting first comparing the type name and then by
+	the obj ids).  Does not work recursively, so dict.items() must have
+	_safe_key applied to both the key and the value.
+	"""
+	
+	__slots__ = ['obj']
+	
+	def __init__(self, obj):
+	    self.obj = obj
+	
+	def __lt__(self, other):
+		try:
+			return self.obj < other.obj
+		except TypeError:
+			return ((str(type(self.obj)), id(self.obj)) < \
+			        (str(type(other.obj)), id(other.obj)))
+
+def _safe_tuple(t):
+    "Helper function for comparing 2-tuples"
+    return _safe_key(t[0]), _safe_key(t[1])
+
+
+class PrettyPrinter(pprint.PrettyPrinter):
+	def format(self, object, context, maxlevels, level):
+		return _safe_repr(object, context, maxlevels, level, self._sort_dicts)
+	
+	# Break the maximum line length rules of pprint for strings (for which JSON
+	# doesn't support the multiline string concatenation) and all other types
+	# that were moded to have a non-default formatting to more closely align
+	# with JSON
+	_dispatch = pprint.PrettyPrinter._dispatch.copy()
+	for tp in (str, bool):
+		try:
+			del _dispatch[tp.__repr__]
+		except (AttributeError, KeyError):
+			pass
+
+
 def main(argv=sys.argv[1:], program=sys.argv[0]):
 	parser = argparse.ArgumentParser(description=__doc__, prog=pathlib.Path(program).name)
 	parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
@@ -161,7 +286,8 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 	print(f"Using database path: {db_path}")
 	
 	with mozidb.IndexedDB(db_path) as conn:
-		pprint.pprint(jmespath.search(args.key_name, IDBObjectWrapper(conn)))
+		pretty_printer = PrettyPrinter()
+		pretty_printer.pprint(jmespath.search(args.key_name, IDBObjectWrapper(conn)))
 	
 	return 0
 

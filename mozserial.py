@@ -34,12 +34,16 @@ class JSInt32(int):
 
 class JSBigInt(int):
 	"""Type to represent the arbitrary precision JavaScript “BigInt” type"""
-	pass
+	
+	def __repr__(self) -> str:
+		return f"BigInt({self!s})"
 
 
 class JSBigIntObj(JSBigInt):
 	"""Type to represent the JavaScript BigInt object type (vs the primitive type)"""
-	pass
+	
+	def __repr__(self) -> str:
+		return f"new BigInt({self!s})"
 
 
 class JSBooleanObj(int):
@@ -69,8 +73,11 @@ class JSBooleanObj(int):
 	def __rxor__(self, other: bool) -> bool:
 		return other ^ bool(self)
 	
-	def __str__(self, other: bool) -> str:
+	def __str__(self) -> str:
 		return str(bool(self))
+	
+	def __repr__(self) -> str:
+		return f"new Boolean({str(self).lower()})"
 
 
 
@@ -118,11 +125,17 @@ class JSMapObj(collections.UserDict):
 	
 	def __setitem__(self, key: object, value: object):
 		super().__setitem__(self.key_to_hashable(key), value)
+	
+	def __repr__(self) -> str:
+		inner_repr = ", ".join(repr(k.inner) + ": " + repr(v) for k, v in self.items())
+		return f"new Map({{{inner_repr}}})"
 
 
 class JSNumberObj(float):
 	"""Type to represent JavaScript number/float “objects” (vs the primitive type)"""
-	pass
+	
+	def __repr__(self) -> str:
+		return f"new Number({self!r})"
 
 
 class JSRegExpObj:
@@ -155,6 +168,9 @@ class JSRegExpObj:
 		if self.flags | RegExpFlag.UNICODE:
 			pass  #XXX
 		return re.compile(self.expr, flags)
+	
+	def __repr__(self) -> str:
+		return f"new RegExp({self.expr!r}, {self.flags!r})"
 
 
 class JSSavedFrame:
@@ -169,7 +185,9 @@ class JSSetObj:
 
 class JSStringObj(str):
 	"""Type to represent JavaScript string “objects” (vs the primitive type)"""
-	pass
+	
+	def __repr__(self) -> str:
+		return f"new String({self!r})"
 
 
 
@@ -244,6 +262,18 @@ class RegExpFlag(enum.IntFlag):
 	GLOBAL      = 0b00010
 	MULTILINE   = 0b00100
 	UNICODE     = 0b01000
+	
+	def __str__(self) -> str:
+		chars = ""
+		if self & RegExpFlag.GLOBAL:
+			chars += "g"
+		if self & RegExpFlag.IGNORE_CASE:
+			chars += "i"
+		if self & RegExpFlag.MULTILINE:
+			chars += "m"
+		if self & RegExpFlag.UNICODE:
+			chars += "u"
+		return chars
 
 
 class Scope(enum.IntEnum):
