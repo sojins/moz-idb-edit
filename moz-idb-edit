@@ -7,6 +7,7 @@
 #   – Python source code by Alexander Schlarb, 2020.
 
 import argparse
+import collections.abc
 import json
 import pathlib
 import pprint
@@ -15,6 +16,7 @@ import os
 import sys
 import typing as ty
 
+import jmespath
 import mozidb
 
 __dir__ = pathlib.Path(__file__).parent
@@ -86,6 +88,21 @@ def find_context_id_by_name(profile_dir: pathlib.Path, name: str) -> int:
 		raise KeyError(name)
 
 
+class IDBObjectWrapper(collections.abc.Mapping):
+	def __init__(self, conn: mozidb.IndexedDB):
+		self._conn = conn
+	
+	def __getitem__(self, name: str) -> object:
+		return self._conn.read_object(name)
+	
+	def __iter__(self) -> ty.Iterator[object]:
+		raise NotImplementedError("Not yet!")
+		yield
+	
+	def __len__(self) -> int:
+		return sum(1 for _ in self)
+
+
 def main(argv=sys.argv[1:], program=sys.argv[0]):
 	parser = argparse.ArgumentParser(description=__doc__, prog=pathlib.Path(program).name)
 	parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
@@ -138,13 +155,13 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 		if ctx_id:
 			origin_label += f"^userContextId={ctx_id}"
 		
-		db_path = args.profile / "storage" / "default" / origin_label	
+		db_path = args.profile / "storage" / "default" / origin_label
 		db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
 	
 	print(f"Using database path: {db_path}")
 	
 	with mozidb.IndexedDB(db_path) as conn:
-		pprint.pprint(conn.read_object(args.key_name))
+		pprint.pprint(jmespath.search(args.key_name, IDBObjectWrapper(conn)))
 	
 	return 0
 
