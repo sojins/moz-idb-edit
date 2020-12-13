@@ -14,7 +14,7 @@ import enum
 import io
 import re
 import struct
-import typing
+import typing as ty
 
 
 class ParseError(ValueError):
@@ -110,7 +110,7 @@ class JSMapObj(collections.UserDict):
 	def __getitem__(self, key: object) -> object:
 		return super().__getitem__(self.key_to_hashable(key))
 	
-	def __iter__(self) -> typing.Iterator[object]:
+	def __iter__(self) -> ty.Iterator[object]:
 		for key in super().__iter__():
 			if isinstance(key, _HashableContainer):
 				key = key.inner
@@ -298,10 +298,10 @@ class _Input:
 
 
 class Reader:
-	all_objs: typing.List[typing.Union[list, dict]]
+	all_objs: ty.List[ty.Union[list, dict]]
 	compat:   bool
 	input:    _Input
-	objs:     typing.List[typing.Union[list, dict]]
+	objs:     ty.List[ty.Union[list, dict]]
 	
 	
 	def __init__(self, stream: io.BufferedReader):

@@ -15,7 +15,7 @@ import os
 import struct
 import sqlite3
 import time
-import typing
+import typing as ty
 
 import mozserial
 import snappy
@@ -42,7 +42,7 @@ class KeyCodec:
 		return cls._encode(value, set())
 	
 	@classmethod
-	def _encode(cls, value: object, seen: typing.Set[int], type_off: int = 0) -> bytes:
+	def _encode(cls, value: object, seen: ty.Set[int], type_off: int = 0) -> bytes:
 		if id(value) in seen:
 			raise ValueError("Cannot encode recursive datastructures")
 		seen.add(id(value))
@@ -66,7 +66,7 @@ class KeyCodec:
 			return cls._encode_number(value, int(KeyType.DATE) + type_off)
 	
 	@classmethod
-	def encode_number(cls, value: typing.Union[int, float], type_off: int = 0) -> bytes:
+	def encode_number(cls, value: ty.Union[int, float], type_off: int = 0) -> bytes:
 		buf = bytearray()
 		cls._encode_number(buf, float(value), int(KeyType.FLOAT) + type_off)
 		return bytes(buf)
@@ -125,7 +125,7 @@ class KeyCodec:
 
 
 class IndexedDB(sqlite3.Connection):
-	def __init__(self, dbpath: typing.Union[os.PathLike, str, bytes]):
+	def __init__(self, dbpath: ty.Union[os.PathLike, str, bytes]):
 		super().__init__(dbpath)
 	
 	def read_object(self, key_name: str):

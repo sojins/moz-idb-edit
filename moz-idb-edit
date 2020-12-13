@@ -13,7 +13,7 @@ import pprint
 import re
 import os
 import sys
-import typing
+import typing as ty
 
 import mozidb
 
@@ -65,7 +65,7 @@ def read_user_contexts(profile_dir: pathlib.Path):
 		return 4294967295
 
 
-def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str) -> typing.Optional[str]:
+def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str) -> ty.Optional[str]:
 	for name, value in read_user_prefs(profile_dir / "prefs.js"):
 		if name == "extensions.webextensions.uuids":
 			try:
