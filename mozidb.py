@@ -51,6 +51,12 @@ class KeyCodec:
 		return bytes(buf)
 	
 	@classmethod
+	def decode(cls, value: bytes) -> object:
+		result, index = cls._decode(value)
+		assert index >= len(value)
+		return result
+	
+	@classmethod
 	def _encode(cls, buf: bytearray, value: object, seen: ty.Set[int], type_off: int = 0):
 		if id(value) in seen:
 			raise ValueError("Cannot encode recursive datastructures")
@@ -81,11 +87,46 @@ class KeyCodec:
 			buf += cls.encode_binary(value, type_off)
 			return
 		
-		if isinstance(value, list):
+		if isinstance(value, (list, tuple)):
 			cls._encode_list(buf, value, seen, type_off)
 			return
 		
 		raise ValueError(f"Cannot encode {repr(value)}")
+	
+	@classmethod
+	def _decode(cls, buf: bytes, index: int = 0, type_off: int = 0) -> object:
+		type = buf[index] - type_off
+		if type >= KeyType.ARRAY:
+			result = []
+			
+			type_off += KeyType.ARRAY
+			if type_off == KeyType.ARRAY * cls.MAX_ARRAY_COLLAPSE:
+				index   += 1
+				type_off = 0
+			
+			while index < len(buf) and buf[index] - type_off != KeyType.TERMINATOR:
+				item, index = cls._decode(buf, index, type_off)
+				result.append(item)
+				
+				type_off = 0
+			
+			assert index >= len(buf) or buf[index] - type_off == KeyType.TERMINATOR, \
+			       "Should have found end-of-array marker"
+			
+			return tuple(result), index+1
+		elif type == KeyType.STRING:
+			return cls._decode_string(buf, index, KeyType.STRING, type_off)
+		elif type == KeyType.DATE:
+			timestamp, index = cls._decode_number(buf, index, KeyType.DATE)
+			
+			result = datetime.datetime.fromtimestamp(timestamp, datetime.timezone.utc)
+			return result, index
+		elif type == KeyType.FLOAT:
+			return cls._decode_number(buf, index, KeyType.FLOAT)
+		elif type == KeyType.BINARY:
+			return cls._decode_string(buf, index, KeyType.BINARY, type_off)
+		else:
+			raise ValueError(f"Unknown key type {type}")
 	
 	@classmethod
 	def encode_number(cls, value: ty.Union[int, float], type_off: int = 0) -> bytes:
@@ -104,6 +145,19 @@ class KeyCodec:
 			as_int |= 0x7000000000000000
 		
 		buf.append(struct.pack(">q", as_int))
+	
+	def _decode_number(cls, buf: bytes, index: int, type: int) -> float:
+		assert buf[index] % int(KeyType.ARRAY) == type, "Don't call me!"
+		index += 1
+		
+		value = struct.unpack(">q", buf[index:index+8].ljust(8, b"\0"))[0]
+		if value & 0x8000000000000000:
+			value &= 0x7FFFFFFFFFFFFFFF
+		else:
+			value = 0 - value
+		index += 8
+		
+		return struct.unpack("=d", struct.pack("=q", value))[0], index
 	
 	@classmethod
 	def encode_binary(cls, value: bytes, type_off: int = 0) -> bytes:
@@ -146,6 +200,42 @@ class KeyCodec:
 		buf.append(int(KeyType.TERMINATOR))
 	
 	@classmethod
+	def _decode_string(cls, buf: bytes, index: int, type: int, type_off: int) -> ty.Union[str, bytes]:
+		assert buf[index] % int(KeyType.ARRAY) == type, "Don't call me!"
+		index += 1
+		
+		result = bytearray()
+		while index < len(buf) and buf[index] - type_off != KeyType.TERMINATOR:
+			c = buf[index]
+			index += 1
+			
+			if c & 0x80 == 0:
+				c -= cls.ONE_BYTE_ADJUST
+			elif c & 0x40 == 0:
+				c = c << 8
+				if index < len(buf):
+					c |= buf[index]
+					index += 1
+				c -= cls.TWO_BYTE_ADJUST - 0x8000
+			elif type != KeyType.BINARY:
+				c = c << (16 - cls.THREE_BYTE_SHIFT)
+				if index < len(buf):
+					c |= buf[index] << (8 - cls.THREE_BYTE_SHIFT)
+					index += 1
+				if index < len(buf):
+					c |= buf[index] >> cls.THREE_BYTE_SHIFT
+					index += 1
+			
+			if type != KeyType.BINARY:
+				result += c.to_bytes(4, "little")
+			else:
+				result.append(c & 0xFF)
+		
+		if type != KeyType.BINARY:
+			result = result.decode("UTF-32le")
+		return result, index
+	
+	@classmethod
 	def _encode_list(cls, buf: bytearray, value: list, seen: ty.Set[int], type_off: int = 0):
 		# Key::ArrayValueEncoder::BeginSubkeyList
 		type_off += int(KeyType.ARRAY)
@@ -169,14 +259,14 @@ class IndexedDB(sqlite3.Connection):
 	def __init__(self, dbpath: ty.Union[os.PathLike, str, bytes]):
 		super().__init__(dbpath)
 	
-	def read_object(self, key_name: str):
+	def read_object(self, key_name: object) -> object:
 		key = KeyCodec.encode(key_name)
 		
 		# Query data
 		cur = self.cursor()
 		cur.execute("SELECT data, file_ids FROM object_data WHERE key=?", (key,))
 		result = cur.fetchone()
-		if not result:
+		if result is None:
 			raise KeyError(key_name)
 		
 		# Validate data
@@ -187,3 +277,48 @@ class IndexedDB(sqlite3.Connection):
 		decompressed = snappy.decompress(data)
 		reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
 		return reader.read()
+	
+	def read_objects(self) -> ty.Dict[object, object]:
+		items = {}
+		
+		# Query data
+		cur = self.cursor()
+		cur.execute("SELECT key, data, file_ids FROM object_data")
+		result = cur.fetchone()
+		while result is not None:
+			# Validate data
+			key_name, data, file_ids = result
+			assert file_ids is None  #XXX: TODO
+			
+			# Parse data
+			decompressed = snappy.decompress(data)
+			reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
+			content = reader.read()
+			
+			items[KeyCodec.decode(key_name)] = content
+			
+			result = cur.fetchone()
+		
+		return items
+	
+	def list_objects(self) -> ty.List[object]:
+		key_names = []
+		
+		# Query data
+		cur = self.cursor()
+		cur.execute("SELECT key FROM object_data")
+		result = cur.fetchone()
+		while result is not None:
+			key_names.append(KeyCodec.decode(result[0]))
+			result = cur.fetchone()
+		
+		return key_names
+	
+	def count_objects(self) -> ty.List[object]:
+		# Query data
+		cur = self.cursor()
+		cur.execute("SELECT COUNT(*) FROM object_data")
+		result = cur.fetchone()
+		assert result is not None
+		
+		return result[0]

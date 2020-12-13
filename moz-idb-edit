@@ -96,11 +96,23 @@ class IDBObjectWrapper(collections.abc.Mapping):
 		return self._conn.read_object(name)
 	
 	def __iter__(self) -> ty.Iterator[object]:
-		raise NotImplementedError("Not yet!")
-		yield
+		yield from self._conn.list_objects()
 	
 	def __len__(self) -> int:
-		return sum(1 for _ in self)
+		return self._conn.count_objects()
+	
+	def __repr__(self) -> str:
+		inner_repr = ", ".join(repr(k) + ": " + repr(v) for k, v in self.items())
+		return f"{{{inner_repr}}}"
+	
+	def keys(self) -> ty.List[object]:
+		return self._conn.list_objects()
+	
+	def items(self) -> ty.Iterable[ty.Tuple[object, object]]:
+		return self._conn.read_objects().items()
+	
+	def values(self) -> ty.Iterable[object]:
+		return self._conn.read_objects().values()
 
 
 def _safe_repr(object, context, maxlevels, level, sort_dicts):
@@ -110,12 +122,14 @@ def _safe_repr(object, context, maxlevels, level, sort_dicts):
 	"""
 	typ = type(object)
 	if typ in _builtin_scalars:
-		# This is the entire actual patch: Use the JSON library to generate
-		# `repr` for all primitive types
+		# This is the actual patch: Use the JSON library to generate `repr` for
+		# all primitive types
 		return json.dumps(object, ensure_ascii=False), True, False
 	
 	r = getattr(typ, "__repr__", None)
-	if issubclass(typ, dict) and r is dict.__repr__:
+	# Also allow our custom type to be treated as dict
+	if issubclass(typ, (dict, IDBObjectWrapper)) and \
+	   r in (dict.__repr__, IDBObjectWrapper.__repr__):
 		if not object:
 			return "{}", True, False
 		objid = id(object)
@@ -226,6 +240,9 @@ class PrettyPrinter(pprint.PrettyPrinter):
 			del _dispatch[tp.__repr__]
 		except (AttributeError, KeyError):
 			pass
+	
+	# Have our custom type be treated like a regular dict would
+	_dispatch[IDBObjectWrapper.__repr__] = pprint.PrettyPrinter._pprint_dict
 
 
 def main(argv=sys.argv[1:], program=sys.argv[0]):
@@ -240,7 +257,8 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 	                         "when determining the database path.")
 	parser.add_argument("-profile", "--profile", metavar="PROFILE", type=pathlib.Path,
 	                    help="Path to the Firefox/MozTK application profile directory.")
-	parser.add_argument("key_name", metavar="KEY")
+	parser.add_argument("key_name", metavar="KEY", default="@", nargs="?",
+	                    help="JMESPath of the key to query.")
 	
 	args = parser.parse_args(argv)
 	
