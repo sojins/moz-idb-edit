@@ -37,12 +37,21 @@ class KeyCodec:
 	TWO_BYTE_ADJUST = -0x7F
 	THREE_BYTE_SHIFT = 6
 	
-	@classmethod
-	def encode(cls, value: object) -> bytes:
-		return cls._encode(value, set())
+	MAX_ARRAY_COLLAPSE = 3
 	
 	@classmethod
-	def _encode(cls, value: object, seen: ty.Set[int], type_off: int = 0) -> bytes:
+	def encode(cls, value: object) -> bytes:
+		buf = bytearray()
+		cls._encode(buf, value, set())
+		
+		# TrimBuffer
+		while buf[-1] == int(KeyType.TERMINATOR):
+			buf.pop()
+		
+		return bytes(buf)
+	
+	@classmethod
+	def _encode(cls, buf: bytearray, value: object, seen: ty.Set[int], type_off: int = 0):
 		if id(value) in seen:
 			raise ValueError("Cannot encode recursive datastructures")
 		seen.add(id(value))
@@ -51,10 +60,12 @@ class KeyCodec:
 			if math.isnan(value):
 				raise ValueError("Cannot encode NaN")
 			
-			return cls.encode_number(value, type_off)
+			buf += cls.encode_number(value, type_off)
+			return
 		
 		if isinstance(value, str):
-			return cls.encode_string(value, type_off)
+			buf += cls.encode_string(value, type_off)
+			return
 		
 		if isinstance(value, time.struct_time):
 			timestamp = time.mktime(value)
@@ -63,7 +74,18 @@ class KeyCodec:
 		
 		if isinstance(value, datetime.datetime):
 			value = value.astimezone(datetime.timezone.utc).timestamp()
-			return cls._encode_number(value, int(KeyType.DATE) + type_off)
+			buf += cls._encode_number(value, int(KeyType.DATE) + type_off)
+			return
+		
+		if isinstance(value, (bytes, bytearray, memoryview)):
+			buf += cls.encode_binary(value, type_off)
+			return
+		
+		if isinstance(value, list):
+			cls._encode_list(buf, value, seen, type_off)
+			return
+		
+		raise ValueError(f"Cannot encode {repr(value)}")
 	
 	@classmethod
 	def encode_number(cls, value: ty.Union[int, float], type_off: int = 0) -> bytes:
@@ -96,7 +118,7 @@ class KeyCodec:
 		return bytes(buf)
 	
 	@classmethod
-	def _encode_string(cls, buf: bytearray, value: str, type: int) -> bytes:
+	def _encode_string(cls, buf: bytearray, value: str, type: int):
 		# Write type marker
 		buf.append(type)
 		
@@ -121,7 +143,26 @@ class KeyCodec:
 					buf.append((c >> 8)  & 0xFF)
 					buf.append((c >> 0)  & 0xFF)
 		
-		#buf.append(int(KeyType.TERMINATOR))
+		buf.append(int(KeyType.TERMINATOR))
+	
+	@classmethod
+	def _encode_list(cls, buf: bytearray, value: list, seen: ty.Set[int], type_off: int = 0):
+		# Key::ArrayValueEncoder::BeginSubkeyList
+		type_off += int(KeyType.ARRAY)
+		if type_off == int(KeyType.ARRAY) * cls.MAX_ARRAY_COLLAPSE:
+			buf.append(type_off)
+			type_off = 0
+		assert type_off % int(KeyType.ARRAY) == 0, \
+		       "Current type offset must indicate beginning of array"
+		assert type_off < int(KeyType.ARRAY) * cls.MAX_ARRAY_COLLAPSE
+		
+		for entry in value:
+			# Key::ArrayValueEncoder::ConvertSubkey
+			cls._encode(buf, entry, seen, type_off)
+			type_off = 0
+		
+		# Key::ArrayValueEncoder::EndSubkeyList
+		buf.append(int(KeyType.TERMINATOR) + type_off)
 
 
 class IndexedDB(sqlite3.Connection):
