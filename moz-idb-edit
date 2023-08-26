@@ -22,7 +22,7 @@ import jmespath
 import mozidb
 
 __dir__ = pathlib.Path(__file__).parent
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 USER_CONTEXT_WEB_EXT = "userContextIdInternal.webextStorageLocal"
