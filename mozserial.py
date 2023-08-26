@@ -417,7 +417,7 @@ class Reader:
 
                     # Extend list with extra slots if needed
                     while key >= len(obj):
-                        obj.append(NotImplemented)
+                        obj.append(None)
 
                 obj[key] = val
 
