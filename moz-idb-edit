@@ -14,6 +14,7 @@ import pathlib
 import pprint
 import re
 import os
+import shlex
 import sys
 import typing as ty
 
@@ -268,11 +269,27 @@ def getMozProfileOrDefault(parser, args):
         parser.error("Could not determine default Firefox profile, pass --profile")
 
 
+def discover_idbs(sitebase):
+    dbs = {}
+    for db_path in sitebase.iterdir():
+        if not db_path.name.endswith('.sqlite'):
+            continue
+        with mozidb.IndexedDB(db_path) as conn:
+            db_name = conn.get_name()
+            if db_name is not None:
+                dbs[db_name] = db_path
+    return dbs
+
+
 def main(argv=sys.argv[1:], program=sys.argv[0]):
     parser = argparse.ArgumentParser(description=__doc__, prog=pathlib.Path(program).name)
     parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
     parser.add_argument("-x", "--extension", action="store", metavar="EXT_ID",
                         help="Use database of the extension with the given Extension ID.")
+    parser.add_argument("-s", "--site", action="store", metavar="SITE_NAME",
+                        help="Use database of the site with the given name (- to list).")
+    parser.add_argument("-S", "--sdb", action="store", metavar="DB_NAME",
+                        help="Use database with the given name (omit to list) below a site.")
     parser.add_argument("--dbpath", action="store", metavar="DB_PATH", type=pathlib.Path,
                         help="Use database file with the the given path.")
     parser.add_argument("--userctx", action="store",
@@ -285,9 +302,12 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 
     args = parser.parse_args(argv)
 
-    if (int(bool(args.dbpath)) + int(bool(args.extension))) != 1:
-        parser.error("Exactly one of --dbpath or --extension must be used")
+    if (int(bool(args.dbpath)) + int(bool(args.extension)) + int(bool(args.site))) != 1:
+        parser.error("Exactly one of --dbpath, --extension or --site must be used")
         return 1
+
+    if args.sdb and not args.site:
+        parser.error("--sdb requires --site")
 
     ctx_id = 0  # Use default
     if args.userctx:
@@ -312,6 +332,33 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
             ctx_id = find_context_id_by_name(args.profile, USER_CONTEXT_WEB_EXT)
 
         origin_label = f"moz-extension+++{ext_uuid}"
+    if args.site:
+        getMozProfileOrDefault(parser, args)
+        storagebase = args.profile.joinpath('storage/default')
+        # list sites?
+        if args.site == '-':
+            for site in sorted(map(lambda dir: dir.name,
+                               filter(lambda dir: dir.name.startswith('http') and dir.joinpath('idb').exists(),
+                                      storagebase.iterdir()))):
+                print('--site', shlex.quote(site))
+            sys.exit(0)
+        sitebase = storagebase.joinpath(args.site).joinpath('idb')
+        if not sitebase.exists():
+            parser.error("Invalid --site given (pass --site - to list)")
+        # list site databases?
+        if not args.sdb:
+            dbs = discover_idbs(sitebase)
+            for db_name in sorted(dbs.keys()):
+                print('--sdb', shlex.quote(db_name))
+                print('--sdb', shlex.quote(dbs[db_name].name))
+            sys.exit(0)
+        args.dbpath = sitebase.joinpath(args.sdb)
+        if not args.dbpath.exists():
+            dbs = discover_idbs(sitebase)
+            if args.sdb in dbs:
+                args.dbpath = dbs[args.sdb]
+        if not args.dbpath.exists():
+            parser.error("Invalid --sdb given (omit --sdb with --site to list)")
 
     if args.dbpath:
         db_path = args.dbpath

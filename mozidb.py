@@ -259,6 +259,14 @@ class IndexedDB(sqlite3.Connection):
     def __init__(self, dbpath: ty.Union[os.PathLike, str, bytes]):
         super().__init__(dbpath)
 
+    def get_name(self):
+        cur = self.cursor()
+        cur.execute("SELECT name FROM database")
+        result = cur.fetchone()
+        if result is None:
+            return None
+        return result[0]
+
     def read_object(self, key_name: object) -> object:
         key = KeyCodec.encode(key_name)
 
