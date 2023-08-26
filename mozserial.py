@@ -34,48 +34,48 @@ class JSInt32(int):
 
 class JSBigInt(int):
 	"""Type to represent the arbitrary precision JavaScript “BigInt” type"""
-	
+
 	def __repr__(self) -> str:
 		return f"BigInt({self!s})"
 
 
 class JSBigIntObj(JSBigInt):
 	"""Type to represent the JavaScript BigInt object type (vs the primitive type)"""
-	
+
 	def __repr__(self) -> str:
 		return f"new BigInt({self!s})"
 
 
 class JSBooleanObj(int):
 	"""Type to represent JavaScript boolean “objects” (vs the primitive type)
-	
+
 	Note: This derives from `int`, since one cannot directly derive from `bool`."""
 	__slots__ = ()
-	
+
 	def __new__(self, inner: object = False):
 		return int.__new__(bool(inner))
-	
+
 	def __and__(self, other: bool) -> bool:
 		return bool(self) & other
-	
+
 	def __or__(self, other: bool) -> bool:
 		return bool(self) | other
-	
+
 	def __xor__(self, other: bool) -> bool:
 		return bool(self) ^ other
-	
+
 	def __rand__(self, other: bool) -> bool:
 		return other & bool(self)
-	
+
 	def __ror__(self, other: bool) -> bool:
 		return other | bool(self)
-	
+
 	def __rxor__(self, other: bool) -> bool:
 		return other ^ bool(self)
-	
+
 	def __str__(self) -> str:
 		return str(bool(self))
-	
+
 	def __repr__(self) -> str:
 		return f"new Boolean({str(self).lower()})"
 
@@ -83,16 +83,16 @@ class JSBooleanObj(int):
 
 class _HashableContainer:
 	inner: object
-	
+
 	def __init__(self, inner: object):
 		self.inner = inner
-	
+
 	def __hash__(self):
 		return id(self.inner)
-	
+
 	def __repr__(self):
 		return repr(self.inner)
-	
+
 	def __str__(self):
 		return str(self.inner)
 
@@ -107,25 +107,25 @@ class JSMapObj(collections.UserDict):
 			return _HashableContainer(key)
 		else:
 			return key
-	
+
 	def __contains__(self, key: object) -> bool:
 		return super().__contains__(self.key_to_hashable(key))
-	
+
 	def __delitem__(self, key: object) -> None:
 		return super().__delitem__(self.key_to_hashable(key))
-	
+
 	def __getitem__(self, key: object) -> object:
 		return super().__getitem__(self.key_to_hashable(key))
-	
+
 	def __iter__(self) -> ty.Iterator[object]:
 		for key in super().__iter__():
 			if isinstance(key, _HashableContainer):
 				key = key.inner
 			yield key
-	
+
 	def __setitem__(self, key: object, value: object):
 		super().__setitem__(self.key_to_hashable(key), value)
-	
+
 	def __repr__(self) -> str:
 		inner_repr = ", ".join(repr(k.inner) + ": " + repr(v) for k, v in self.items())
 		return f"new Map({{{inner_repr}}})"
@@ -133,7 +133,7 @@ class JSMapObj(collections.UserDict):
 
 class JSNumberObj(float):
 	"""Type to represent JavaScript number/float “objects” (vs the primitive type)"""
-	
+
 	def __repr__(self) -> str:
 		return f"new Number({self!r})"
 
@@ -141,11 +141,11 @@ class JSNumberObj(float):
 class JSRegExpObj:
 	expr:  str
 	flags: 'RegExpFlag'
-	
+
 	def __init__(self, expr: str, flags: 'RegExpFlag'):
 		self.expr  = expr
 		self.flags = flags
-	
+
 	@classmethod
 	def from_re(cls, regex: re.Pattern) -> 'JSRegExpObj':
 		flags = RegExpFlag.GLOBAL
@@ -156,7 +156,7 @@ class JSRegExpObj:
 		if regex.flags | re.MULTILINE:
 			flags |= RegExpFlag.MULTILINE
 		return cls(regex.pattern, flags)
-	
+
 	def to_re(self) -> re.Pattern:
 		flags = 0
 		if self.flags | RegExpFlag.IGNORE_CASE:
@@ -168,7 +168,7 @@ class JSRegExpObj:
 		if self.flags | RegExpFlag.UNICODE:
 			pass  #XXX
 		return re.compile(self.expr, flags)
-	
+
 	def __repr__(self) -> str:
 		return f"new RegExp({self.expr!r}, {self.flags!r})"
 
@@ -185,7 +185,7 @@ class JSSetObj:
 
 class JSStringObj(str):
 	"""Type to represent JavaScript string “objects” (vs the primitive type)"""
-	
+
 	def __repr__(self) -> str:
 		return f"new String({self!r})"
 
@@ -195,14 +195,14 @@ class DataType(enum.IntEnum):
 	# Special values
 	FLOAT_MAX = 0xFFF00000
 	HEADER    = 0xFFF10000
-	
+
 	# Basic JavaScript types
 	NULL      = 0xFFFF0000
 	UNDEFINED = 0xFFFF0001
 	BOOLEAN   = 0xFFFF0002
 	INT32     = 0xFFFF0003
 	STRING    = 0xFFFF0004
-	
+
 	# Extended JavaScript types
 	DATE_OBJECT           = 0xFFFF0005
 	REGEXP_OBJECT         = 0xFFFF0006
@@ -222,21 +222,21 @@ class DataType(enum.IntEnum):
 	#DO_NOT_USE_3
 	DATA_VIEW_OBJECT      = 0xFFFF0015
 	SAVED_FRAME_OBJECT    = 0xFFFF0016  # ?
-	
+
 	# Principals ?
 	JSPRINCIPALS      = 0xFFFF0017
 	NULL_JSPRINCIPALS = 0xFFFF0018
 	RECONSTRUCTED_SAVED_FRAME_PRINCIPALS_IS_SYSTEM     = 0xFFFF0019
 	RECONSTRUCTED_SAVED_FRAME_PRINCIPALS_IS_NOT_SYSTEM = 0xFFFF001A
-	
+
 	# ?
 	SHARED_ARRAY_BUFFER_OBJECT = 0xFFFF001B
 	SHARED_WASM_MEMORY_OBJECT  = 0xFFFF001C
-	
+
 	# Arbitrarily sized integers
 	BIGINT        = 0xFFFF001D
 	BIGINT_OBJECT = 0xFFFF001E
-	
+
 	# Older typed arrays
 	TYPED_ARRAY_V1_MIN           = 0xFFFF0100
 	TYPED_ARRAY_V1_INT8          = TYPED_ARRAY_V1_MIN + 0
@@ -249,7 +249,7 @@ class DataType(enum.IntEnum):
 	TYPED_ARRAY_V1_FLOAT64       = TYPED_ARRAY_V1_MIN + 7
 	TYPED_ARRAY_V1_UINT8_CLAMPED = TYPED_ARRAY_V1_MIN + 8
 	TYPED_ARRAY_V1_MAX           = TYPED_ARRAY_V1_UINT8_CLAMPED
-	
+
 	# Transfer-only tags (not used for persistent data)
 	TRANSFER_MAP_HEADER              = 0xFFFF0200
 	TRANSFER_MAP_PENDING_ENTRY       = 0xFFFF0201
@@ -262,7 +262,7 @@ class RegExpFlag(enum.IntFlag):
 	GLOBAL      = 0b00010
 	MULTILINE   = 0b00100
 	UNICODE     = 0b01000
-	
+
 	def __str__(self) -> str:
 		chars = ""
 		if self & RegExpFlag.GLOBAL:
@@ -286,43 +286,43 @@ class Scope(enum.IntEnum):
 
 class _Input:
 	stream: io.BufferedReader
-	
+
 	def __init__(self, stream: io.BufferedReader):
 		self.stream = stream
-	
+
 	def peek(self) -> int:
 		try:
 			return struct.unpack_from("<q", self.stream.peek(8))[0]
 		except struct.error:
 			raise EOFError() from None
-	
+
 	def peek_pair(self) -> (int, int):
 		v = self.peek()
 		return ((v >> 32) & 0xFFFFFFFF, (v >> 0) & 0xFFFFFFFF)
-	
+
 	def drop_padding(self, read_length):
 		length = 8 - ((read_length - 1) % 8) - 1
 		result = self.stream.read(length)
 		if len(result) < length:
 			raise EOFError()
-	
+
 	def read(self, fmt="q"):
 		try:
 			return struct.unpack("<" + fmt, self.stream.read(8))[0]
 		except struct.error:
 			raise EOFError() from None
-	
+
 	def read_bytes(self, length: int) -> bytes:
 		result = self.stream.read(length)
 		if len(result) < length:
 			raise EOFError()
 		self.drop_padding(length)
 		return result
-	
+
 	def read_pair(self) -> (int, int):
 		v = self.read()
 		return ((v >> 32) & 0xFFFFFFFF, (v >> 0) & 0xFFFFFFFF)
-	
+
 	def read_double(self) -> float:
 		return self.read("d")
 
@@ -332,32 +332,32 @@ class Reader:
 	compat:   bool
 	input:    _Input
 	objs:     ty.List[ty.Union[list, dict]]
-	
-	
+
+
 	def __init__(self, stream: io.BufferedReader):
 		self.input = _Input(stream)
-		
+
 		self.all_objs = []
 		self.compat   = False
 		self.objs     = []
-	
-	
+
+
 	def read(self):
 		self.read_header()
 		self.read_transfer_map()
-		
+
 		# Start out by reading in the main object and pushing it onto the 'objs'
 		# stack. The data related to this object and its descendants extends
 		# from here to the SCTAG_END_OF_KEYS at the end of the stream.
 		add_obj, result = self.start_read()
 		if add_obj:
 			self.all_objs.append(result)
-		
+
 		# Stop when the stack shows that all objects have been read.
 		while len(self.objs) > 0:
 			# What happens depends on the top obj on the objs stack.
 			obj = self.objs[-1]
-			
+
 			tag, data = self.input.peek_pair()
 			if tag == DataType.END_OF_KEYS:
 				# Pop the current obj off the stack, since we are done with it
@@ -365,7 +365,7 @@ class Reader:
 				self.input.read_pair()
 				self.objs.pop()
 				continue
-			
+
 			# The input stream contains a sequence of "child" values, whose
 			# interpretation depends on the type of obj. These values can be
 			# anything.
@@ -382,26 +382,26 @@ class Reader:
 			add_obj, key = self.start_read()
 			if add_obj:
 				self.all_objs.append(key)
-			
+
 			# Backwards compatibility: Null formerly indicated the end of
 			# object properties.
 			if key is None and not isinstance(obj, (JSMapObj, JSSetObj, JSSavedFrame)):
 				self.objs.pop()
 				continue
-			
+
 			# Set object: the values between obj header (from startRead()) and
 			# DataType.END_OF_KEYS are interpreted as values to add to the set.
 			if isinstance(obj, JSSetObj):
 				obj.add(key)
-			
+
 			if isinstance(obj, JSSavedFrame):
 				raise NotImplementedError()  #XXX: TODO
-			
+
 			# Everything else uses a series of key, value, key, value, … objects.
 			add_obj, val = self.start_read()
 			if add_obj:
 				self.all_objs.append(val)
-			
+
 			# For a Map, store those <key,value> pairs in the contained map
 			# data structure.
 			if isinstance(obj, JSMapObj):
@@ -409,37 +409,37 @@ class Reader:
 			else:
 				if not isinstance(key, (str, int)):
 					raise ParseError("JavaScript object key must be a string or integer")
-				
+
 				if isinstance(obj, list):
 					# Ignore object properties on array
 					if not isinstance(key, int) or key < 0:
 						continue
-					
+
 					# Extend list with extra slots if needed
 					while key >= len(obj):
 						obj.append(NotImplemented)
-				
+
 				obj[key] = val
-		
+
 		self.all_objs.clear()
-		
+
 		return result
-	
-	
+
+
 	def read_header(self) -> None:
 		tag, data = self.input.peek_pair()
-		
+
 		scope: int
 		if tag == DataType.HEADER:
 			tag, data = self.input.read_pair()
-			
+
 			if data == 0:
 				data = int(Scope.SAME_PROCESS)
-			
+
 			scope = data
 		else:  # Old on-disk format
 			scope = int(Scope.DIFFERENT_PROCESS_FOR_INDEX_DB)
-		
+
 		if scope == Scope.DIFFERENT_PROCESS:
 			self.compat = False
 		elif scope == Scope.DIFFERENT_PROCESS_FOR_INDEX_DB:
@@ -448,76 +448,76 @@ class Reader:
 			raise InvalidHeaderError("Can only parse persistent data")
 		else:
 			raise InvalidHeaderError("Invalid scope")
-	
-	
+
+
 	def read_transfer_map(self) -> None:
 		tag, data = self.input.peek_pair()
 		if tag == DataType.TRANSFER_MAP_HEADER:
 			raise InvalidHeaderError("Transfer maps are not allowed for persistent data")
-	
-	
+
+
 	def read_bigint(self, info: int) -> JSBigInt:
 		length   = info & 0x7FFFFFFF
 		negative = bool(info & 0x80000000)
 		raise NotImplementedError()
-	
-	
+
+
 	def read_string(self, info: int) -> str:
 		length = info & 0x7FFFFFFF
 		latin1 = bool(info & 0x80000000)
-		
+
 		if latin1:
 			return self.input.read_bytes(length).decode("latin-1")
 		else:
 			return self.input.read_bytes(length * 2).decode("utf-16le")
-	
-	
+
+
 	def start_read(self):
 		tag, data = self.input.read_pair()
-		
+
 		if tag == DataType.NULL:
 			return False, None
-		
+
 		elif tag == DataType.UNDEFINED:
 			return False, NotImplemented
-		
+
 		elif tag == DataType.INT32:
 			if data > 0x7FFFFFFF:
 				data -= 0x80000000
 			return False, JSInt32(data)
-		
+
 		elif tag == DataType.BOOLEAN:
 			return False, bool(data)
 		elif tag == DataType.BOOLEAN_OBJECT:
 			return True, JSBooleanObj(data)
-		
+
 		elif tag == DataType.STRING:
 			return False, self.read_string(data)
 		elif tag == DataType.STRING_OBJECT:
 			return True, JSStringObj(self.read_string(data))
-		
+
 		elif tag == DataType.NUMBER_OBJECT:
 			return True, JSNumberObj(self.input.read_double())
-		
+
 		elif tag == DataType.BIGINT:
 			return False, self.read_bigint()
 		elif tag == DataType.BIGINT_OBJECT:
 			return True, JSBigIntObj(self.read_bigint())
-		
+
 		elif tag == DataType.DATE_OBJECT:
 			# These timestamps are always UTC
 			return True, datetime.datetime.fromtimestamp(self.input.read_double(),
 			                                             datetime.timezone.utc)
-		
+
 		elif tag == DataType.REGEXP_OBJECT:
 			flags = RegExpFlag(data)
-			
+
 			tag2, data2 = self.input.read_pair()
 			if tag2 != DataType.STRING:
 				raise ParseError("RegExp type must be followed by string")
-			
+
 			return True, JSRegExpObj(flags, self.read_string(data2))
-		
+
 		elif tag == DataType.ARRAY_OBJECT:
 			obj = []
 			self.objs.append(obj)
@@ -526,50 +526,50 @@ class Reader:
 			obj = {}
 			self.objs.append(obj)
 			return True, obj
-		
+
 		elif tag == DataType.BACK_REFERENCE_OBJECT:
 			try:
 				return False, self.all_objs[data]
 			except IndexError:
 				raise ParseError("Object backreference to non-existing object") from None
-		
+
 		elif tag == DataType.ARRAY_BUFFER_OBJECT:
 			return True, self.read_array_buffer(data)  #XXX: TODO
-		
+
 		elif tag == DataType.SHARED_ARRAY_BUFFER_OBJECT:
 			return True, self.read_shared_array_buffer(data)  #XXX: TODO
-		
+
 		elif tag == DataType.SHARED_WASM_MEMORY_OBJECT:
 			return True, self.read_shared_wasm_memory(data)  #XXX: TODO
-		
+
 		elif tag == DataType.TYPED_ARRAY_OBJECT:
 			array_type = self.input.read()
 			return False, self.read_typed_array(array_type, data)  #XXX: TODO
-		
+
 		elif tag == DataType.DATA_VIEW_OBJECT:
 			return False, self.read_data_view(data)  #XXX: TODO
-		
+
 		elif tag == DataType.MAP_OBJECT:
 			obj = JSMapObj()
 			self.objs.append(obj)
 			return True, obj
-		
+
 		elif tag == DataType.SET_OBJECT:
 			obj = JSSetObj()
 			self.objs.append(obj)
 			return True, obj
-		
+
 		elif tag == DataType.SAVED_FRAME_OBJECT:
 			obj = self.read_saved_frame(data)  #XXX: TODO
 			self.objs.append(obj)
 			return True, obj
-		
+
 		elif tag < int(DataType.FLOAT_MAX):
 			# Reassemble double floating point value
 			return False, struct.unpack("=d", struct.pack("=q", (tag << 32) | data))[0]
-		
+
 		elif DataType.TYPED_ARRAY_V1_MIN <= tag <= DataType.TYPED_ARRAY_V1_MAX:
 			return False, self.read_typed_array(tag - DataType.TYPED_ARRAY_V1_MIN, data)
-		
+
 		else:
 			raise ParseError("Unsupported type")
