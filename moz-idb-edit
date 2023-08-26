@@ -5,6 +5,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 # Credits:
 #   – Python source code by Alexander Schlarb, 2020.
+#   - extended by mirabilos, 2023.
 
 import argparse
 import collections.abc
@@ -245,6 +246,28 @@ class PrettyPrinter(pprint.PrettyPrinter):
     _dispatch[IDBObjectWrapper.__repr__] = pprint.PrettyPrinter._pprint_dict
 
 
+def getMozProfileOrDefault(parser, args):
+    if args.profile:
+        return
+    homedir = pathlib.Path.home()
+    mozdir = homedir.joinpath('.mozilla/firefox')
+    from configparser import ConfigParser
+    mozini = ConfigParser()
+    mozini.read(mozdir.joinpath('profiles.ini'))
+    for s in mozini.sections():
+        if not s.startswith('Profile'):
+            continue
+        if 'path' not in mozini[s]:
+            continue
+        if 'default' not in mozini[s]:
+            continue
+        if mozini[s]['default'] == '1':
+            args.profile = mozdir.joinpath(mozini[s]['path'])
+            break
+    if not args.profile:
+        parser.error("Could not determine default Firefox profile, pass --profile")
+
+
 def main(argv=sys.argv[1:], program=sys.argv[0]):
     parser = argparse.ArgumentParser(description=__doc__, prog=pathlib.Path(program).name)
     parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
@@ -276,9 +299,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 
     # Collect required extra data for figuring out extension paths
     if args.extension:
-        if not args.profile:
-            parser.error("Argument --profile is required for --extension")
-            return 1
+        getMozProfileOrDefault(parser, args)
 
         # Map extension ID to browser internal UUID
         ext_uuid = find_uuid_by_ext_id(args.profile, args.extension)
