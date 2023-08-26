@@ -29,197 +29,197 @@ USER_CONTEXT_WEB_EXT = "userContextIdInternal.webextStorageLocal"
 # Based on https://stackoverflow.com/a/24563687/277882
 USER_PREF_RE = re.compile(rb"\s*user_pref\(([\"'])(.+?)\1,\s*(.+?)\);")
 def read_user_prefs(prefs_path: os.PathLike):
-	try:
-		with open(prefs_path, "rb") as file:
-			for line_no, line in enumerate(file, 1):
-				m = USER_PREF_RE.match(line)
-				if not m:
-					continue
-				k, v = m.group(2), m.group(3)
-				try:
-					k = k.decode("utf-8")
-					v = json.loads(v)
-				except (ValueError, UnicodeDecodeError) as exc:
-					print(f"Failed to parse {prefs_path}:{line_no}: {type(exc).__name__}: {exc}", file=sys.stderr)
-				else:
-					yield k, v
-	except FileNotFoundError:
-		pass
+    try:
+        with open(prefs_path, "rb") as file:
+            for line_no, line in enumerate(file, 1):
+                m = USER_PREF_RE.match(line)
+                if not m:
+                    continue
+                k, v = m.group(2), m.group(3)
+                try:
+                    k = k.decode("utf-8")
+                    v = json.loads(v)
+                except (ValueError, UnicodeDecodeError) as exc:
+                    print(f"Failed to parse {prefs_path}:{line_no}: {type(exc).__name__}: {exc}", file=sys.stderr)
+                else:
+                    yield k, v
+    except FileNotFoundError:
+        pass
 
 
 def read_user_contexts(profile_dir: pathlib.Path):
-	try:
-		with open(profile_dir / "containers.json", "rb") as file:
-			data = json.load(file)
+    try:
+        with open(profile_dir / "containers.json", "rb") as file:
+            data = json.load(file)
 
-		assert data["version"] == 4
+        assert data["version"] == 4
 
-		for identity in data["identities"]:
-			name = identity.get("name")
-			if name is None:
-				name = identity["l10nID"].split(".", 1)[0]
-				if name.startswith("userContext"):
-					name = name[11:]
+        for identity in data["identities"]:
+            name = identity.get("name")
+            if name is None:
+                name = identity["l10nID"].split(".", 1)[0]
+                if name.startswith("userContext"):
+                    name = name[11:]
 
-			yield int(identity["userContextId"]), name
-	except (AssertionError, FileNotFoundError, ValueError) as exc:
-		print(f"Failed to parse {profile_dir}/containers.json: {type(exc).__name__}: {exc}", file=sys.stderr)
-		return 4294967295
+            yield int(identity["userContextId"]), name
+    except (AssertionError, FileNotFoundError, ValueError) as exc:
+        print(f"Failed to parse {profile_dir}/containers.json: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 4294967295
 
 
 def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str) -> ty.Optional[str]:
-	for name, value in read_user_prefs(profile_dir / "prefs.js"):
-		if name == "extensions.webextensions.uuids":
-			try:
-				value = json.loads(value)
-				return value.get(ext_id, None)
-			except ValueError:
-				pass
+    for name, value in read_user_prefs(profile_dir / "prefs.js"):
+        if name == "extensions.webextensions.uuids":
+            try:
+                value = json.loads(value)
+                return value.get(ext_id, None)
+            except ValueError:
+                pass
 
 
 def find_context_id_by_name(profile_dir: pathlib.Path, name: str) -> int:
-	for ctx_id, ctx_name in read_user_contexts(profile_dir):
-		if ctx_name == name:
-			return ctx_id
+    for ctx_id, ctx_name in read_user_contexts(profile_dir):
+        if ctx_name == name:
+            return ctx_id
 
-	if name == USER_CONTEXT_WEB_EXT:
-		return 4294967295  # Default value (-1 as unsigned 32-value)
-	else:
-		raise KeyError(name)
+    if name == USER_CONTEXT_WEB_EXT:
+        return 4294967295  # Default value (-1 as unsigned 32-value)
+    else:
+        raise KeyError(name)
 
 
 class IDBObjectWrapper(collections.abc.Mapping):
-	def __init__(self, conn: mozidb.IndexedDB):
-		self._conn = conn
+    def __init__(self, conn: mozidb.IndexedDB):
+        self._conn = conn
 
-	def __getitem__(self, name: str) -> object:
-		return self._conn.read_object(name)
+    def __getitem__(self, name: str) -> object:
+        return self._conn.read_object(name)
 
-	def __iter__(self) -> ty.Iterator[object]:
-		yield from self._conn.list_objects()
+    def __iter__(self) -> ty.Iterator[object]:
+        yield from self._conn.list_objects()
 
-	def __len__(self) -> int:
-		return self._conn.count_objects()
+    def __len__(self) -> int:
+        return self._conn.count_objects()
 
-	def __repr__(self) -> str:
-		inner_repr = ", ".join(repr(k) + ": " + repr(v) for k, v in self.items())
-		return f"{{{inner_repr}}}"
+    def __repr__(self) -> str:
+        inner_repr = ", ".join(repr(k) + ": " + repr(v) for k, v in self.items())
+        return f"{{{inner_repr}}}"
 
-	def keys(self) -> ty.List[object]:
-		return self._conn.list_objects()
+    def keys(self) -> ty.List[object]:
+        return self._conn.list_objects()
 
-	def items(self) -> ty.Iterable[ty.Tuple[object, object]]:
-		return self._conn.read_objects().items()
+    def items(self) -> ty.Iterable[ty.Tuple[object, object]]:
+        return self._conn.read_objects().items()
 
-	def values(self) -> ty.Iterable[object]:
-		return self._conn.read_objects().values()
+    def values(self) -> ty.Iterable[object]:
+        return self._conn.read_objects().values()
 
 
 def _safe_repr(object, context, maxlevels, level, sort_dicts):
-	"""A repr function that returns more JSON-like output for primitive types
+    """A repr function that returns more JSON-like output for primitive types
 
-	Code copied from Python 3.9 stdlib pprint.py module.
-	"""
-	typ = type(object)
-	if typ in _builtin_scalars:
-		# This is the actual patch: Use the JSON library to generate `repr` for
-		# all primitive types
-		return json.dumps(object, ensure_ascii=False), True, False
+    Code copied from Python 3.9 stdlib pprint.py module.
+    """
+    typ = type(object)
+    if typ in _builtin_scalars:
+        # This is the actual patch: Use the JSON library to generate `repr` for
+        # all primitive types
+        return json.dumps(object, ensure_ascii=False), True, False
 
-	r = getattr(typ, "__repr__", None)
-	# Also allow our custom type to be treated as dict
-	if issubclass(typ, (dict, IDBObjectWrapper)) and \
-	   r in (dict.__repr__, IDBObjectWrapper.__repr__):
-		if not object:
-			return "{}", True, False
-		objid = id(object)
-		if maxlevels and level >= maxlevels:
-			return "{...}", False, objid in context
-		if objid in context:
-			return _recursion(object), False, True
-		context[objid] = 1
-		readable = True
-		recursive = False
-		components = []
-		append = components.append
-		level += 1
-		if sort_dicts:
-			items = sorted(object.items(), key=_safe_tuple)
-		else:
-			items = object.items()
-		for k, v in items:
-			krepr, kreadable, krecur = _safe_repr(k, context, maxlevels, level, sort_dicts)
-			vrepr, vreadable, vrecur = _safe_repr(v, context, maxlevels, level, sort_dicts)
-			append("%s: %s" % (krepr, vrepr))
-			readable = readable and kreadable and vreadable
-			if krecur or vrecur:
-				recursive = True
-		del context[objid]
-		return "{%s}" % ", ".join(components), readable, recursive
+    r = getattr(typ, "__repr__", None)
+    # Also allow our custom type to be treated as dict
+    if issubclass(typ, (dict, IDBObjectWrapper)) and \
+       r in (dict.__repr__, IDBObjectWrapper.__repr__):
+        if not object:
+            return "{}", True, False
+        objid = id(object)
+        if maxlevels and level >= maxlevels:
+            return "{...}", False, objid in context
+        if objid in context:
+            return _recursion(object), False, True
+        context[objid] = 1
+        readable = True
+        recursive = False
+        components = []
+        append = components.append
+        level += 1
+        if sort_dicts:
+            items = sorted(object.items(), key=_safe_tuple)
+        else:
+            items = object.items()
+        for k, v in items:
+            krepr, kreadable, krecur = _safe_repr(k, context, maxlevels, level, sort_dicts)
+            vrepr, vreadable, vrecur = _safe_repr(v, context, maxlevels, level, sort_dicts)
+            append("%s: %s" % (krepr, vrepr))
+            readable = readable and kreadable and vreadable
+            if krecur or vrecur:
+                recursive = True
+        del context[objid]
+        return "{%s}" % ", ".join(components), readable, recursive
 
-	if (issubclass(typ, list) and r is list.__repr__) or \
-	   (issubclass(typ, tuple) and r is tuple.__repr__):
-		if issubclass(typ, list):
-			if not object:
-				return "[]", True, False
-			format = "[%s]"
-		elif len(object) == 1:
-			format = "(%s,)"
-		else:
-			if not object:
-				return "()", True, False
-			format = "(%s)"
-		objid = id(object)
-		if maxlevels and level >= maxlevels:
-			return format % "...", False, objid in context
-		if objid in context:
-			return _recursion(object), False, True
-		context[objid] = 1
-		readable = True
-		recursive = False
-		components = []
-		append = components.append
-		level += 1
-		for o in object:
-			orepr, oreadable, orecur = _safe_repr(o, context, maxlevels, level, sort_dicts)
-			append(orepr)
-			if not oreadable:
-				readable = False
-			if orecur:
-				recursive = True
-		del context[objid]
-		return format % ", ".join(components), readable, recursive
+    if (issubclass(typ, list) and r is list.__repr__) or \
+       (issubclass(typ, tuple) and r is tuple.__repr__):
+        if issubclass(typ, list):
+            if not object:
+                return "[]", True, False
+            format = "[%s]"
+        elif len(object) == 1:
+            format = "(%s,)"
+        else:
+            if not object:
+                return "()", True, False
+            format = "(%s)"
+        objid = id(object)
+        if maxlevels and level >= maxlevels:
+            return format % "...", False, objid in context
+        if objid in context:
+            return _recursion(object), False, True
+        context[objid] = 1
+        readable = True
+        recursive = False
+        components = []
+        append = components.append
+        level += 1
+        for o in object:
+            orepr, oreadable, orecur = _safe_repr(o, context, maxlevels, level, sort_dicts)
+            append(orepr)
+            if not oreadable:
+                readable = False
+            if orecur:
+                recursive = True
+        del context[objid]
+        return format % ", ".join(components), readable, recursive
 
-	rep = repr(object)
-	return rep, (rep and not rep.startswith('<')), False
+    rep = repr(object)
+    return rep, (rep and not rep.startswith('<')), False
 
 _builtin_scalars = frozenset({str, bytes, bytearray, int, float, complex,
                               bool, type(None)})
 
 def _recursion(object):
-	return ("<Recursion on %s with id=%s>"
-	        % (type(object).__name__, id(object)))
+    return ("<Recursion on %s with id=%s>"
+            % (type(object).__name__, id(object)))
 
 class _safe_key:
-	"""Helper function for key functions when sorting unorderable objects.
+    """Helper function for key functions when sorting unorderable objects.
 
-	The wrapped-object will fallback to a Py2.x style comparison for
-	unorderable types (sorting first comparing the type name and then by
-	the obj ids).  Does not work recursively, so dict.items() must have
-	_safe_key applied to both the key and the value.
-	"""
+    The wrapped-object will fallback to a Py2.x style comparison for
+    unorderable types (sorting first comparing the type name and then by
+    the obj ids).  Does not work recursively, so dict.items() must have
+    _safe_key applied to both the key and the value.
+    """
 
-	__slots__ = ['obj']
+    __slots__ = ['obj']
 
-	def __init__(self, obj):
-	    self.obj = obj
+    def __init__(self, obj):
+        self.obj = obj
 
-	def __lt__(self, other):
-		try:
-			return self.obj < other.obj
-		except TypeError:
-			return ((str(type(self.obj)), id(self.obj)) < \
-			        (str(type(other.obj)), id(other.obj)))
+    def __lt__(self, other):
+        try:
+            return self.obj < other.obj
+        except TypeError:
+            return ((str(type(self.obj)), id(self.obj)) < \
+                    (str(type(other.obj)), id(other.obj)))
 
 def _safe_tuple(t):
     "Helper function for comparing 2-tuples"
@@ -227,88 +227,88 @@ def _safe_tuple(t):
 
 
 class PrettyPrinter(pprint.PrettyPrinter):
-	def format(self, object, context, maxlevels, level):
-		return _safe_repr(object, context, maxlevels, level, self._sort_dicts)
+    def format(self, object, context, maxlevels, level):
+        return _safe_repr(object, context, maxlevels, level, self._sort_dicts)
 
-	# Break the maximum line length rules of pprint for strings (for which JSON
-	# doesn't support the multiline string concatenation) and all other types
-	# that were moded to have a non-default formatting to more closely align
-	# with JSON
-	_dispatch = pprint.PrettyPrinter._dispatch.copy()
-	for tp in (str, bool):
-		try:
-			del _dispatch[tp.__repr__]
-		except (AttributeError, KeyError):
-			pass
+    # Break the maximum line length rules of pprint for strings (for which JSON
+    # doesn't support the multiline string concatenation) and all other types
+    # that were moded to have a non-default formatting to more closely align
+    # with JSON
+    _dispatch = pprint.PrettyPrinter._dispatch.copy()
+    for tp in (str, bool):
+        try:
+            del _dispatch[tp.__repr__]
+        except (AttributeError, KeyError):
+            pass
 
-	# Have our custom type be treated like a regular dict would
-	_dispatch[IDBObjectWrapper.__repr__] = pprint.PrettyPrinter._pprint_dict
+    # Have our custom type be treated like a regular dict would
+    _dispatch[IDBObjectWrapper.__repr__] = pprint.PrettyPrinter._pprint_dict
 
 
 def main(argv=sys.argv[1:], program=sys.argv[0]):
-	parser = argparse.ArgumentParser(description=__doc__, prog=pathlib.Path(program).name)
-	parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
-	parser.add_argument("-x", "--extension", action="store", metavar="EXT_ID",
-	                    help="Use database of the extension with the given Extension ID.")
-	parser.add_argument("--dbpath", action="store", metavar="DB_PATH", type=pathlib.Path,
-	                    help="Use database file with the the given path.")
-	parser.add_argument("--userctx", action="store",
-	                    help="Use given user context (“Firefox container”) "
-	                         "when determining the database path.")
-	parser.add_argument("-profile", "--profile", metavar="PROFILE", type=pathlib.Path,
-	                    help="Path to the Firefox/MozTK application profile directory.")
-	parser.add_argument("key_name", metavar="KEY", default="@", nargs="?",
-	                    help="JMESPath of the key to query.")
+    parser = argparse.ArgumentParser(description=__doc__, prog=pathlib.Path(program).name)
+    parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
+    parser.add_argument("-x", "--extension", action="store", metavar="EXT_ID",
+                        help="Use database of the extension with the given Extension ID.")
+    parser.add_argument("--dbpath", action="store", metavar="DB_PATH", type=pathlib.Path,
+                        help="Use database file with the the given path.")
+    parser.add_argument("--userctx", action="store",
+                        help="Use given user context (“Firefox container”) "
+                             "when determining the database path.")
+    parser.add_argument("-profile", "--profile", metavar="PROFILE", type=pathlib.Path,
+                        help="Path to the Firefox/MozTK application profile directory.")
+    parser.add_argument("key_name", metavar="KEY", default="@", nargs="?",
+                        help="JMESPath of the key to query.")
 
-	args = parser.parse_args(argv)
+    args = parser.parse_args(argv)
 
-	if (int(bool(args.dbpath)) + int(bool(args.extension))) != 1:
-		parser.error("Exactly one of --dbpath or --extension must be used")
-		return 1
+    if (int(bool(args.dbpath)) + int(bool(args.extension))) != 1:
+        parser.error("Exactly one of --dbpath or --extension must be used")
+        return 1
 
-	ctx_id = 0  # Use default
-	if args.userctx:
-		try:
-			ctx_id = int(args.userctx)
-		except ValueError:
-			ctx_id = find_context_id_by_name(args.profile_dir, args.userctx)
+    ctx_id = 0  # Use default
+    if args.userctx:
+        try:
+            ctx_id = int(args.userctx)
+        except ValueError:
+            ctx_id = find_context_id_by_name(args.profile_dir, args.userctx)
 
 
-	# Collect required extra data for figuring out extension paths
-	if args.extension:
-		if not args.profile:
-			parser.error("Argument --profile is required for --extension")
-			return 1
+    # Collect required extra data for figuring out extension paths
+    if args.extension:
+        if not args.profile:
+            parser.error("Argument --profile is required for --extension")
+            return 1
 
-		# Map extension ID to browser internal UUID
-		ext_uuid = find_uuid_by_ext_id(args.profile, args.extension)
-		if ext_uuid is None:
-			print(f"Failed to look up internal UUID for extension ID: {ext_id} (is the extension installed?)", file=sys.stderr)
-			return 1
+        # Map extension ID to browser internal UUID
+        ext_uuid = find_uuid_by_ext_id(args.profile, args.extension)
+        if ext_uuid is None:
+            print(f"Failed to look up internal UUID for extension ID: {ext_id} (is the extension installed?)", file=sys.stderr)
+            return 1
 
-		# Use special extension storage ID if no other was set
-		if args.userctx is None:
-			ctx_id = find_context_id_by_name(args.profile, USER_CONTEXT_WEB_EXT)
+        # Use special extension storage ID if no other was set
+        if args.userctx is None:
+            ctx_id = find_context_id_by_name(args.profile, USER_CONTEXT_WEB_EXT)
 
-		origin_label = f"moz-extension+++{ext_uuid}"
+        origin_label = f"moz-extension+++{ext_uuid}"
 
-	if args.dbpath:
-		db_path = args.dbpath
-	else:
-		if ctx_id:
-			origin_label += f"^userContextId={ctx_id}"
+    if args.dbpath:
+        db_path = args.dbpath
+    else:
+        if ctx_id:
+            origin_label += f"^userContextId={ctx_id}"
 
-		db_path = args.profile / "storage" / "default" / origin_label
-		db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
+        db_path = args.profile / "storage" / "default" / origin_label
+        db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
 
-	print(f"Using database path: {db_path}")
+    print(f"Using database path: {db_path}")
 
-	with mozidb.IndexedDB(db_path) as conn:
-		pretty_printer = PrettyPrinter()
-		pretty_printer.pprint(jmespath.search(args.key_name, IDBObjectWrapper(conn)))
+    with mozidb.IndexedDB(db_path) as conn:
+        pretty_printer = PrettyPrinter()
+        pretty_printer.pprint(jmespath.search(args.key_name, IDBObjectWrapper(conn)))
 
-	return 0
+    return 0
 
 
 if __name__ == "__main__":
-	sys.exit(main())
+    sys.exit(main())
