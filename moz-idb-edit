@@ -369,7 +369,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
         db_path = args.profile / "storage" / "default" / origin_label
         db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
 
-    print(f"Using database path: {db_path}")
+    print(f"Using database path: {db_path}", file=sys.stderr)
 
     with mozidb.IndexedDB(db_path) as conn:
         pretty_printer = PrettyPrinter()
