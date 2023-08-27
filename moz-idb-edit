@@ -333,6 +333,13 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
             ctx_id = find_context_id_by_name(profile_path, USER_CONTEXT_WEB_EXT)
 
         origin_label = f"moz-extension+++{ext_uuid}"
+
+        if not db_path:
+            if ctx_id:
+                origin_label += f"^userContextId={ctx_id}"
+
+            db_path = profile_path / "storage" / "default" / origin_label
+            db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
     elif args.site:
         storagebase = profile_path.joinpath('storage/default')
         # list sites?
@@ -359,13 +366,9 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
                 db_path = dbs[args.sdb]
         if not db_path.exists():
             parser.error("Invalid --sdb given (omit --sdb with --site to list)")
-
-    if not db_path:
-        if ctx_id:
-            origin_label += f"^userContextId={ctx_id}"
-
-        db_path = profile_path / "storage" / "default" / origin_label
-        db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
+    else:
+        if not db_path.exists():
+            parser.error("Invalid --dbpath given")
 
     print(f"Using database path: {db_path}", file=sys.stderr)
 
