@@ -297,8 +297,10 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
         homedir = pathlib.Path.home()
         mozdir = homedir.joinpath('.mozilla/firefox')
         from configparser import ConfigParser
-        mozini = ConfigParser()
+        mozini = ConfigParser(interpolation=None)
+        # this will silently ignore nōn-existent files
         mozini.read(mozdir.joinpath('profiles.ini'))
+        # this will be skipped for nōn-existent or empty profiles.ini
         for s in mozini.sections():
             if not s.startswith('Profile'):
                 continue
