@@ -309,7 +309,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
             if mozini[s]['default'] == '1':
                 profile_path = mozdir.joinpath(mozini[s]['path'])
                 break
-        if not profile_path:
+        if not (profile_path and profile_path.exists()):
             parser.error("Could not determine default Firefox profile, pass --profile")
 
     ctx_id = 0  # Use default
