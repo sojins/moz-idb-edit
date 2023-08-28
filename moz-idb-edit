@@ -319,7 +319,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 		try:
 			ctx_id = int(args.userctx)
 		except ValueError:
-			ctx_id = find_context_id_by_name(profile_path_dir, args.userctx)
+			ctx_id = find_context_id_by_name(profile_path, args.userctx)
 
 
 	# Collect required extra data for figuring out extension paths
@@ -327,7 +327,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 		# Map extension ID to browser internal UUID
 		ext_uuid = find_uuid_by_ext_id(profile_path, args.extension)
 		if ext_uuid is None:
-			print(f"Failed to look up internal UUID for extension ID: {ext_id} (is the extension installed?)", file=sys.stderr)
+			print(f"Failed to look up internal UUID for extension ID: {ext_uuid} (is the extension installed?)", file=sys.stderr)
 			return 1
 
 		# Use special extension storage ID if no other was set
