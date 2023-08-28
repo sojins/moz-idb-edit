@@ -90,6 +90,14 @@ def find_context_id_by_name(profile_dir: pathlib.Path, name: str) -> int:
 		raise KeyError(name)
 
 
+def find_context_name_by_id(profile_dir: pathlib.Path, id: int) -> str:
+	for ctx_id, ctx_name in read_user_contexts(profile_dir):
+		if ctx_id == id:
+			return ctx_name
+
+	raise KeyError(id)
+
+
 class IDBObjectWrapper(collections.abc.Mapping):
 	def __init__(self, conn: mozidb.IndexedDB):
 		self._conn = conn
@@ -374,26 +382,34 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 					# Skip sites not having any indexed IB stored
 					continue
 				
-				print("--site", dirpath.name)
+				scheme, netloc = dirpath.name.split("+++", 1)
+				if scheme == "file":
+					netloc = netloc.replace("+", os.sep)
+				else:
+					netloc = netloc.replace("+", ":")
+				origin = scheme + "://" + netloc
+				
+				print("--site", origin)
 
 			return 0
 
-		sitebase = storagebase / args.site / "idb"
-		if not sitebase.is_dir():
+		site_name = args.site.replace(":", "+").replace("/", "+").replace(os.sep, "+")
+		site_base = storagebase / site_name / "idb"
+		if not site_base.is_dir():
 			parser.error("Invalid --site given (pass --list-sites to list)")
 			return 1
 
 		# list site databases?
 		if not args.sdb:
-			dbs = discover_idbs(sitebase)
+			dbs = discover_idbs(site_base)
 			for db_name in sorted(dbs.keys()):
 				print("--sdb", shlex.quote(db_name))
 				print("--sdb", shlex.quote(dbs[db_name].name))
 			return 0
 
-		db_path = sitebase / args.sdb
+		db_path = site_base / args.sdb
 		if not db_path.is_file():
-			dbs = discover_idbs(sitebase)
+			dbs = discover_idbs(site_base)
 			if args.sdb in dbs:
 				db_path = dbs[args.sdb]
 		if not db_path.exists():
