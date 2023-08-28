@@ -196,7 +196,7 @@ def _safe_repr(object, context, maxlevels, level, sort_dicts):
 		return format % ", ".join(components), readable, recursive
 
 	rep = repr(object)
-	return rep, (rep and not rep.startswith('<')), False
+	return rep, (rep and not rep.startswith("<")), False
 
 _builtin_scalars = frozenset({str, bytes, bytearray, int, float, complex,
                               bool, type(None)})
@@ -214,7 +214,7 @@ class _safe_key:
 	_safe_key applied to both the key and the value.
 	"""
 
-	__slots__ = ['obj']
+	__slots__ = ["obj"]
 
 	def __init__(self, obj):
 		self.obj = obj
@@ -253,7 +253,7 @@ class PrettyPrinter(pprint.PrettyPrinter):
 def discover_idbs(sitebase):
 	dbs = {}
 	for db_path in sitebase.iterdir():
-		if not db_path.name.endswith('.sqlite'):
+		if not db_path.name.endswith(".sqlite"):
 			continue
 		with mozidb.IndexedDB(db_path) as conn:
 			db_name = conn.get_name()
@@ -295,21 +295,21 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 
 	if (args.extension or args.site) and not profile_path:
 		homedir = pathlib.Path.home()
-		mozdir = homedir.joinpath('.mozilla/firefox')
+		mozdir = homedir.joinpath(".mozilla/firefox")
 		from configparser import ConfigParser
 		mozini = ConfigParser(interpolation=None)
 		# this will silently ignore nōn-existent files
-		mozini.read(mozdir.joinpath('profiles.ini'))
+		mozini.read(mozdir.joinpath("profiles.ini"))
 		# this will be skipped for nōn-existent or empty profiles.ini
 		for s in mozini.sections():
-			if not s.startswith('Profile'):
+			if not s.startswith("Profile"):
 				continue
-			if 'path' not in mozini[s]:
+			if "path" not in mozini[s]:
 				continue
-			if 'default' not in mozini[s]:
+			if "default" not in mozini[s]:
 				continue
-			if mozini[s]['default'] == '1':
-				profile_path = mozdir.joinpath(mozini[s]['path'])
+			if mozini[s]["default"] == "1":
+				profile_path = mozdir.joinpath(mozini[s]["path"])
 				break
 		if not (profile_path and profile_path.exists()):
 			parser.error("Could not determine default Firefox profile, pass --profile")
@@ -343,23 +343,23 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 			db_path = profile_path / "storage" / "default" / origin_label
 			db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
 	elif args.site:
-		storagebase = profile_path.joinpath('storage/default')
+		storagebase = profile_path.joinpath("storage/default")
 		# list sites?
-		if args.site == '-':
+		if args.site == "-":
 			for site in sorted(map(lambda dir: dir.name,
-			                   filter(lambda dir: dir.name.startswith('http') and dir.joinpath('idb').exists(),
+			                   filter(lambda dir: dir.name.startswith("http") and dir.joinpath("idb").exists(),
 			                          storagebase.iterdir()))):
-				print('--site', shlex.quote(site))
+				print("--site", shlex.quote(site))
 			sys.exit(0)
-		sitebase = storagebase.joinpath(args.site).joinpath('idb')
+		sitebase = storagebase.joinpath(args.site).joinpath("idb")
 		if not sitebase.exists():
 			parser.error("Invalid --site given (pass --site - to list)")
 		# list site databases?
 		if not args.sdb:
 			dbs = discover_idbs(sitebase)
 			for db_name in sorted(dbs.keys()):
-				print('--sdb', shlex.quote(db_name))
-				print('--sdb', shlex.quote(dbs[db_name].name))
+				print("--sdb", shlex.quote(db_name))
+				print("--sdb", shlex.quote(dbs[db_name].name))
 			sys.exit(0)
 		db_path = sitebase.joinpath(args.sdb)
 		if not db_path.exists():

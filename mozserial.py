@@ -140,14 +140,14 @@ class JSNumberObj(float):
 
 class JSRegExpObj:
 	expr:  str
-	flags: 'RegExpFlag'
+	flags: "RegExpFlag"
 
-	def __init__(self, expr: str, flags: 'RegExpFlag'):
+	def __init__(self, expr: str, flags: "RegExpFlag"):
 		self.expr  = expr
 		self.flags = flags
 
 	@classmethod
-	def from_re(cls, regex: re.Pattern) -> 'JSRegExpObj':
+	def from_re(cls, regex: re.Pattern) -> "JSRegExpObj":
 		flags = RegExpFlag.GLOBAL
 		if regex.flags | re.DOTALL:
 			pass  # Not supported in current (2020-01) version of SpiderMonkey
@@ -346,7 +346,7 @@ class Reader:
 		self.read_header()
 		self.read_transfer_map()
 
-		# Start out by reading in the main object and pushing it onto the 'objs'
+		# Start out by reading in the main object and pushing it onto the “objs”
 		# stack. The data related to this object and its descendants extends
 		# from here to the SCTAG_END_OF_KEYS at the end of the stream.
 		add_obj, result = self.start_read()
@@ -371,7 +371,7 @@ class Reader:
 			# anything.
 			#
 			# startRead() will allocate the (empty) object, but note that when
-			# startRead() returns, 'key' is not yet initialized with any of its
+			# startRead() returns, “key” is not yet initialized with any of its
 			# properties. Those will be filled in by returning to the head of
 			# this loop, processing the first child obj, and continuing until
 			# all children have been fully created.
