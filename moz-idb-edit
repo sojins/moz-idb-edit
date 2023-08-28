@@ -382,18 +382,37 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 					# Skip sites not having any indexed IB stored
 					continue
 				
-				scheme, netloc = dirpath.name.split("+++", 1)
+				encoded_origin, ctx_name = dirpath.name, ""
+				if "^userContextId=" in encoded_origin:
+					encoded_origin, ctx_name = encoded_origin.split("^userContextId=", 1)
+					try:
+						ctx_id = int(ctx_name)
+					except ValueError:
+						pass  # Keep invalid context IDs as-is
+					else:
+						try:
+							ctx_name = find_context_name_by_id(profile_path, ctx_id)
+						except KeyError:
+							pass  # Also keep unknown context IDs as-is
+				
+				scheme, netloc = encoded_origin.split("+++", 1)
 				if scheme == "file":
 					netloc = netloc.replace("+", os.sep)
 				else:
 					netloc = netloc.replace("+", ":")
 				origin = scheme + "://" + netloc
 				
-				print("--site", origin)
+				if ctx_name:
+					print("--site", origin, "--userctx", ctx_name)
+				else:
+					print("--site", origin)
 
 			return 0
 
 		site_name = args.site.replace(":", "+").replace("/", "+").replace(os.sep, "+")
+		if ctx_id != 0:
+			site_name += f"^userContextId={ctx_id}"
+
 		site_base = storagebase / site_name / "idb"
 		if not site_base.is_dir():
 			parser.error("Invalid --site given (pass --list-sites to list)")
