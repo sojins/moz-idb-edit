@@ -298,8 +298,10 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 	parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
 	parser.add_argument("-x", "--extension", action="store", metavar="EXT_ID",
 	                    help="Use database of the extension with the given Extension ID.")
+	parser.add_argument("--list-sites", action="store_true",
+	                    help="List all site databases in the profile directory.")
 	parser.add_argument("-s", "--site", action="store", metavar="SITE_NAME",
-	                    help="Use database of the site with the given name (- to list).")
+	                    help="Use database of the site with the given name.")
 	parser.add_argument("-S", "--sdb", action="store", metavar="DB_NAME",
 	                    help="Use database with the given name (omit to list) below a site.")
 	parser.add_argument("--dbpath", action="store", metavar="DB_PATH", type=pathlib.Path,
@@ -314,20 +316,22 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 
 	args = parser.parse_args(argv)
 
-	if (int(bool(args.dbpath)) + int(bool(args.extension)) + int(bool(args.site))) != 1:
-		parser.error("Exactly one of --dbpath, --extension or --site must be used")
+	if int(bool(args.dbpath)) + int(bool(args.extension)) + int(args.list_sites) + int(bool(args.site)) != 1:
+		parser.error("Exactly one of --dbpath, --extension, --list-sites or --site must be used")
 		return 1
 
 	if args.sdb and not args.site:
 		parser.error("--sdb requires --site")
+		return 1
 
 	profile_path: ty.Optional[pathlib.Path] = args.profile
 	db_path: ty.Optional[pathlib.Path] = args.dbpath
 
-	if (args.extension or args.site) and not profile_path:
+	if (args.extension or args.list_sites or args.site) and not profile_path:
 		profile_path = find_default_profile_dir()
 		if not profile_path or not profile_path.exists():
 			parser.error("Could not determine default Firefox profile, pass --profile")
+			return 1
 
 	ctx_id = 0  # Use default
 	if args.userctx:
@@ -357,34 +361,45 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 
 			db_path = profile_path / "storage" / "default" / origin_label
 			db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
-	elif args.site:
-		storagebase = profile_path.joinpath("storage/default")
-		# list sites?
-		if args.site == "-":
-			for site in sorted(map(lambda dir: dir.name,
-			                   filter(lambda dir: dir.name.startswith("http") and dir.joinpath("idb").exists(),
-			                          storagebase.iterdir()))):
-				print("--site", shlex.quote(site))
-			sys.exit(0)
-		sitebase = storagebase.joinpath(args.site).joinpath("idb")
-		if not sitebase.exists():
-			parser.error("Invalid --site given (pass --site - to list)")
+	elif args.list_sites or args.site:
+		storagebase = profile_path / "storage" / "default"
+		
+		if args.list_sites:
+			for dirpath in storagebase.iterdir():
+				if dirpath.name.startswith("moz-extension") or "+++" not in dirpath.name:
+					# Extensions have special handling, so skip them here
+					continue
+				
+				if not (dirpath / "idb").is_dir():
+					# Skip sites not having any indexed IB stored
+					continue
+				
+				print("--site", dirpath.name)
+
+			return 0
+
+		sitebase = storagebase / args.site / "idb"
+		if not sitebase.is_dir():
+			parser.error("Invalid --site given (pass --list-sites to list)")
+			return 1
+
 		# list site databases?
 		if not args.sdb:
 			dbs = discover_idbs(sitebase)
 			for db_name in sorted(dbs.keys()):
 				print("--sdb", shlex.quote(db_name))
 				print("--sdb", shlex.quote(dbs[db_name].name))
-			sys.exit(0)
-		db_path = sitebase.joinpath(args.sdb)
-		if not db_path.exists():
+			return 0
+
+		db_path = sitebase / args.sdb
+		if not db_path.is_file():
 			dbs = discover_idbs(sitebase)
 			if args.sdb in dbs:
 				db_path = dbs[args.sdb]
 		if not db_path.exists():
 			parser.error("Invalid --sdb given (omit --sdb with --site to list)")
 	else:
-		if not db_path.exists():
+		if not db_path.is_file():
 			parser.error("Invalid --dbpath given")
 
 	print(f"Using database path: {db_path}", file=sys.stderr)
