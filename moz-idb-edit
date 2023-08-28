@@ -250,6 +250,37 @@ class PrettyPrinter(pprint.PrettyPrinter):
 	_dispatch[IDBObjectWrapper.__repr__] = pprint.PrettyPrinter._pprint_dict
 
 
+def find_default_profile_dir() -> ty.Optional[pathlib.Path]:
+	# Determine system default Mozilla directory
+	import platform
+	if platform.win32_ver()[0]:  # Windows
+		mozdir = pathlib.Path(os.environ["APPDATA"]) / "Mozilla" / "Firefox"
+	elif platform.mac_ver()[0]:  # macOS
+		mozdir = pathlib.Path.home() / "Application Support" / "Firefox"
+	else:  # Unix/Linux
+		mozdir = pathlib.Path.home() / ".mozilla" / "firefox"
+
+	# Attempt to read profile information for Mozilla directory
+	from configparser import ConfigParser
+	mozini = ConfigParser(interpolation=None)
+	mozini.read(mozdir / "profiles.ini")  # silently ignores non-existent files
+
+	# Look for path of default profile directory entry in the parsed profile
+	# information
+	for s in mozini.sections():
+		if not s.startswith("Profile"):
+			continue
+		if "path" not in mozini[s]:
+			continue
+		if "default" not in mozini[s]:
+			continue
+
+		if mozini[s]["default"] == "1":
+			return mozdir / mozini[s]["path"]
+
+	return None
+
+
 def discover_idbs(sitebase):
 	dbs = {}
 	for db_path in sitebase.iterdir():
@@ -290,28 +321,12 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 	if args.sdb and not args.site:
 		parser.error("--sdb requires --site")
 
-	profile_path = args.profile
-	db_path = args.dbpath
+	profile_path: ty.Optional[pathlib.Path] = args.profile
+	db_path: ty.Optional[pathlib.Path] = args.dbpath
 
 	if (args.extension or args.site) and not profile_path:
-		homedir = pathlib.Path.home()
-		mozdir = homedir.joinpath(".mozilla/firefox")
-		from configparser import ConfigParser
-		mozini = ConfigParser(interpolation=None)
-		# this will silently ignore nōn-existent files
-		mozini.read(mozdir.joinpath("profiles.ini"))
-		# this will be skipped for nōn-existent or empty profiles.ini
-		for s in mozini.sections():
-			if not s.startswith("Profile"):
-				continue
-			if "path" not in mozini[s]:
-				continue
-			if "default" not in mozini[s]:
-				continue
-			if mozini[s]["default"] == "1":
-				profile_path = mozdir.joinpath(mozini[s]["path"])
-				break
-		if not (profile_path and profile_path.exists()):
+		profile_path = find_default_profile_dir()
+		if not profile_path or not profile_path.exists():
 			parser.error("Could not determine default Firefox profile, pass --profile")
 
 	ctx_id = 0  # Use default
