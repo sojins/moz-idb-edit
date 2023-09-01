@@ -373,6 +373,9 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 		storagebase = profile_path / "storage" / "default"
 		
 		if args.list_sites:
+			# Add sites to list first, so that we can apply sorting before
+			# printing them
+			sites = []
 			for dirpath in storagebase.iterdir():
 				if dirpath.name.startswith("moz-extension") or "+++" not in dirpath.name:
 					# Extensions have special handling, so skip them here
@@ -402,10 +405,15 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 					netloc = netloc.replace("+", ":")
 				origin = scheme + "://" + netloc
 				
+				sites.append((origin, ctx_name))
+			sites.sort()
+			
+			# Print sorted list of sites with their user-context if applicable
+			for origin, ctx_name in sites:
 				if ctx_name:
-					print("--site", origin, "--userctx", ctx_name)
+					print("--site", shlex.quote(origin), "--userctx", shlex.quote(ctx_name))
 				else:
-					print("--site", origin)
+					print("--site", shlex.quote(origin))
 
 			return 0
 
