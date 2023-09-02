@@ -400,7 +400,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 				
 				scheme, netloc = encoded_origin.split("+++", 1)
 				if scheme == "file":
-					netloc = netloc.replace("+", os.sep)
+					netloc = netloc.replace("+", "/")
 				else:
 					netloc = netloc.replace("+", ":")
 				origin = scheme + "://" + netloc
@@ -417,7 +417,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 
 			return 0
 
-		site_name = args.site.replace(":", "+").replace("/", "+").replace(os.sep, "+")
+		site_name = args.site.replace(":", "+").replace("/", "+")
 		if ctx_id != 0:
 			site_name += f"^userContextId={ctx_id}"
 
