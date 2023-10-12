@@ -506,7 +506,7 @@ class Reader:
 
 		elif tag == DataType.DATE_OBJECT:
 			# These timestamps are always UTC
-			return True, datetime.datetime.fromtimestamp(self.input.read_double(),
+			return True, datetime.datetime.fromtimestamp(self.input.read_double() / 1000.0,
 			                                             datetime.timezone.utc)
 
 		elif tag == DataType.REGEXP_OBJECT:
