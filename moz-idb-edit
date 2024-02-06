@@ -4,7 +4,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 # Credits:
-#   – Python source code by Alexander Schlarb, 2020.
+#   – Python source code by Erin Yuki Schlarb, 2020–2024.
 #   - extended by mirabilos, 2023.
 
 import argparse
@@ -54,14 +54,19 @@ def read_user_contexts(profile_dir: pathlib.Path):
 		with open(profile_dir / "containers.json", "rb") as file:
 			data = json.load(file)
 
-		assert data["version"] == 4
+		assert data["version"] in (4, 5)
 
 		for identity in data["identities"]:
 			name = identity.get("name")
 			if name is None:
-				name = identity["l10nID"].split(".", 1)[0]
-				if name.startswith("userContext"):
-					name = name[11:]
+				if data["version"] == 4:
+					# `l10nId` example: “userContextPersonal.label” → “personal”
+					name = identity["l10nID"].split(".", 1)[0]
+					if name.startswith("userContext"):
+						name = name[11].lower() + name[12:]
+				elif data["version"] == 5:
+					# `l10nId` example: “user-context-personal” → “personal”
+					name = identity["l10nID"].removeprefix("user-context-")
 
 			yield int(identity["userContextId"]), name
 	except (AssertionError, FileNotFoundError, ValueError) as exc:
