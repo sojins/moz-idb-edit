@@ -6,7 +6,7 @@
 #   – Source was heavily inspired by
 #     https://searchfox.org/mozilla-central/rev/cc2040bf219ca3279405e09428f9457d41616bf9/js/src/vm/StructuredClone.cpp
 #     and many helpful comments were copied as-is.
-#   – Python source code by Alexander Schlarb, 2020.
+#   – Python source code by Erin Yuki Schlarb, 2020.
 
 import collections
 import datetime
