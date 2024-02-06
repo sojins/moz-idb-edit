@@ -67,7 +67,7 @@ def read_user_contexts(profile_dir: pathlib.Path):
 						name = name[11].lower() + name[12:]
 				elif data["version"] == 5:
 					# `l10nId` example: “user-context-personal” → “personal”
-					name = identity["l10nID"].removeprefix("user-context-")
+					name = identity["l10nId"].removeprefix("user-context-")
 
 			yield int(identity["userContextId"]), name
 	except (AssertionError, FileNotFoundError, ValueError) as exc:
