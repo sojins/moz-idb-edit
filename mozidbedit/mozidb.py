@@ -283,7 +283,7 @@ class IndexedDB(sqlite3.Connection):
 		assert file_ids is None  #XXX: TODO
 
 		# Parse data
-		decompressed = cramjam.snappy.decompress(data)
+		decompressed = cramjam.snappy.decompress_raw(data)
 		reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
 		return reader.read()
 
@@ -300,7 +300,7 @@ class IndexedDB(sqlite3.Connection):
 			assert file_ids is None  #XXX: TODO
 
 			# Parse data
-			decompressed = cramjam.snappy.decompress(data)
+			decompressed = cramjam.snappy.decompress_raw(data)
 			reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
 			content = reader.read()
 
