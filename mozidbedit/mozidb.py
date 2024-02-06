@@ -5,7 +5,7 @@
 # Credits:
 #   – Source was heavily inspired by
 #     https://searchfox.org/mozilla-central/rev/cc2040bf219ca3279405e09428f9457d41616bf9/dom/indexedDB/Key.cpp
-#   – Python source code by Erin Yuki Schlarb, 2020.
+#   – Python source code by Erin Yuki Schlarb, 2020–2024.
 
 import datetime
 import enum
@@ -17,7 +17,7 @@ import sqlite3
 import time
 import typing as ty
 
-import snappy
+import cramjam
 
 from . import mozserial
 
@@ -283,7 +283,7 @@ class IndexedDB(sqlite3.Connection):
 		assert file_ids is None  #XXX: TODO
 
 		# Parse data
-		decompressed = snappy.decompress(data)
+		decompressed = cramjam.snappy.decompress(data)
 		reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
 		return reader.read()
 
@@ -300,7 +300,7 @@ class IndexedDB(sqlite3.Connection):
 			assert file_ids is None  #XXX: TODO
 
 			# Parse data
-			decompressed = snappy.decompress(data)
+			decompressed = cramjam.snappy.decompress(data)
 			reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
 			content = reader.read()
 
