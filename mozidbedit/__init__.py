@@ -137,7 +137,7 @@ def _safe_repr(object, context, maxlevels, level, sort_dicts):
 	Code copied from Python 3.9 stdlib pprint.py module.
 	"""
 	if object is NotImplemented:
-		return "[{\"\\uFDD0moz-idb-edit\":\"NotImplemented\"}]", True, False
+		return "undefined", True, False
 
 	typ = type(object)
 	if typ in _builtin_scalars:
