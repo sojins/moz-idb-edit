@@ -12,14 +12,14 @@ import enum
 import math
 import io
 import os
+import pathlib
 import struct
 import sqlite3
 import time
 import typing as ty
 
-import cramjam
-
 from . import mozserial
+from . import mozsnappy
 
 
 class KeyType(enum.IntEnum):
@@ -257,8 +257,11 @@ class KeyCodec:
 
 
 class IndexedDB(sqlite3.Connection):
+	files_dir: pathlib.Path
+
 	def __init__(self, dbpath: ty.Union[os.PathLike, str, bytes]):
 		super().__init__(dbpath)
+		self.files_dir = pathlib.Path(os.fsdecode(dbpath).removesuffix(".sqlite") + ".files")
 
 	def get_name(self):
 		cur = self.cursor()
@@ -280,12 +283,19 @@ class IndexedDB(sqlite3.Connection):
 
 		# Validate data
 		data, file_ids = result
-		assert file_ids is None  #XXX: TODO
 
 		# Parse data
-		decompressed = cramjam.snappy.decompress_raw(data)
-		reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
-		return reader.read()
+		if file_ids is None:
+			decompressed = mozsnappy.decompress_raw(data)
+			reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
+			return reader.read()
+		else:
+			#FIXME: Figure out the actual format of `file_ids`
+			assert file_ids.startswith(".") and file_ids.removeprefix(".").isnumeric()
+
+			with open(self.files_dir / file_ids.removeprefix("."), "rb") as file:
+				reader = mozserial.Reader(io.BufferedReader(mozsnappy.Decompressor(file)))
+				return reader.read()
 
 	def read_objects(self) -> ty.Dict[object, object]:
 		items = {}
@@ -297,12 +307,20 @@ class IndexedDB(sqlite3.Connection):
 		while result is not None:
 			# Validate data
 			key_name, data, file_ids = result
-			assert file_ids is None  #XXX: TODO
 
 			# Parse data
-			decompressed = cramjam.snappy.decompress_raw(data)
-			reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
-			content = reader.read()
+			if file_ids is None:
+				decompressed = mozsnappy.decompress_raw(data)
+				reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
+				content = reader.read()
+			else:
+				#FIXME: Figure out the actual format of `file_ids`
+				assert file_ids.startswith(".") and file_ids.removeprefix(".").isnumeric()
+
+				with open(self.files_dir / file_ids.removeprefix("."), "rb") as file:
+					reader = mozserial.Reader(io.BufferedReader(mozsnappy.Decompressor(file)))
+					content = reader.read()
+					print(content)
 
 			items[KeyCodec.decode(key_name)] = content
 
