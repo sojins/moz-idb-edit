@@ -5,9 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "moz-idb-edit"
 version = "0.2.0"
+requires-python = ">=3.9"
 dependencies = [
-    "jmespath ~= 1.0",
-    "cramjam ~= 2.7",
+	"jmespath ~= 1.0",
+	"cramjam ~= 2.7",
 ]
 
 [project.scripts]
