@@ -84,6 +84,14 @@ def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str) -> ty.Optional[s
 			except ValueError:
 				pass
 
+def find_ext_info(profile_dir: pathlib.Path) -> ty.Iterator[ty.Tuple[str, str]]:
+	with open(profile_dir / "extensions.json", "rb") as f:
+		ext_data = json.load(f)
+	assert ext_data.get("schemaVersion") == 36
+
+	for extension in ext_data["addons"]:
+		yield extension["id"], extension["defaultLocale"]["name"]
+
 
 def find_context_id_by_name(profile_dir: pathlib.Path, name: str) -> int:
 	for ctx_id, ctx_name in read_user_contexts(profile_dir):
@@ -312,6 +320,8 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 	parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
 	parser.add_argument("-x", "--extension", action="store", metavar="EXT_ID",
 	                    help="Use database of the extension with the given Extension ID.")
+	parser.add_argument("--list-extensions", action="store_true",
+	                    help="List all known extensions in the profile directory.")
 	parser.add_argument("--list-sites", action="store_true",
 	                    help="List all site databases in the profile directory.")
 	parser.add_argument("-s", "--site", action="store", metavar="SITE_NAME",
@@ -330,7 +340,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 
 	args = parser.parse_args(argv)
 
-	if int(bool(args.dbpath)) + int(bool(args.extension)) + int(args.list_sites) + int(bool(args.site)) != 1:
+	if int(bool(args.dbpath)) + int(bool(args.extension)) + int(args.list_extensions) + int(args.list_sites) + int(bool(args.site)) != 1:
 		parser.error("Exactly one of --dbpath, --extension, --list-sites or --site must be used")
 		return 1
 
@@ -341,7 +351,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 	profile_path: ty.Optional[pathlib.Path] = args.profile
 	db_path: ty.Optional[pathlib.Path] = args.dbpath
 
-	if (args.extension or args.list_sites or args.site) and not profile_path:
+	if (args.extension or args.list_extensions or args.list_sites or args.site) and not profile_path:
 		profile_path = find_default_profile_dir()
 		if not profile_path or not profile_path.exists():
 			parser.error("Could not determine default Firefox profile, pass --profile")
@@ -375,6 +385,11 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 
 			db_path = profile_path / "storage" / "default" / origin_label
 			db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
+	elif args.list_extensions:
+		for ext_id, ext_name in sorted(find_ext_info(profile_path)):
+			print("--extension", shlex.quote(ext_id), " #", ext_name)
+
+		return 0
 	elif args.list_sites or args.site:
 		storagebase = profile_path / "storage" / "default"
 		
