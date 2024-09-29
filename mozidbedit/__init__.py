@@ -8,6 +8,7 @@
 
 import argparse
 import collections.abc
+import datetime
 import importlib.metadata
 import json
 import pathlib
@@ -21,6 +22,7 @@ import typing as ty
 import jmespath
 
 from . import mozidb
+from . import mozserial
 
 __dir__ = pathlib.Path(__file__).parent
 __version__ = importlib.metadata.version("moz-idb-edit")
@@ -315,6 +317,38 @@ def discover_idbs(sitebase):
 	return dbs
 
 
+def to_json(obj):
+	# Convert JS object types to basic types
+	if isinstance(obj, bool) or isinstance(obj, mozserial.JSBooleanObj):
+		return bool(obj)
+	elif isinstance(obj, int):
+		return int(obj)
+	elif isinstance(obj, float):
+		return float(obj)
+	elif isinstance(obj, str):
+		return str(obj)
+	elif obj is None or obj is NotImplemented:  # JS undefined → null
+		return None
+	
+	elif isinstance(obj, datetime.datetime):  # datetime → ISO string
+		value = obj.astimezone(datetime.timezone.utc).isoformat()
+		return value if not value.endswith("+00:00") else value[:-6] + "Z"
+	elif isinstance(obj, mozserial.JSRegExpObj):  # JS RegExp → string
+		return str(obj)
+	
+	elif isinstance(obj, list):  # Note: Set isn’t implemented
+		return [to_json(item) for item in obj]
+	elif isinstance(obj, collections.abc.Mapping):
+		return {
+			json.dumps(to_json(key)): to_json(value)
+			for key, value in obj.items()
+			if value is not NotImplemented  # skip `undefined` values entirely
+		}
+	
+	else:
+		raise TypeError(f"Cannot JSON-ify {obj!r}")
+
+
 def resolve_profile_dir(
 		parser: argparse.ArgumentParser,
 		args: argparse.Namespace,
@@ -442,8 +476,12 @@ def handle_read(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
 	print(f"Using database path: {db_path}", file=sys.stderr)
 	
 	with mozidb.IndexedDB(db_path) as conn:
-		pretty_printer = PrettyPrinter()
-		pretty_printer.pprint(jmespath.search(args.key_name, IDBObjectWrapper(conn)))
+		value = jmespath.search(args.key_name, IDBObjectWrapper(conn))
+		if args.output == "full":
+			pretty_printer = PrettyPrinter()
+			pretty_printer.pprint(value)
+		else:  # JSON
+			json.dump(to_json(value), sys.stdout, ensure_ascii=False, indent="\t")
 	
 	return 0
 
@@ -470,36 +508,48 @@ def main(argv=sys.argv[1:], program=sys.argv[0]) -> int:
 	)
 	subparser_lsites.set_defaults(handler=handle_list_sites)
 	
-	#  → Read value(s)
+	#  → Read value(s) – structured or JSON
+	def add_read_args(subparser: argparse.ArgumentParser):
+		subparser.add_argument(
+			"-x", "--extension", action="store", metavar="EXT_ID",
+			help="Use database of the extension with the given Extension ID."
+		)
+		subparser.add_argument(
+			"-s", "--site", action="store", metavar="SITE_NAME",
+			help="Name of the site returned by the `list-sites` command."
+		)
+		subparser.add_argument(
+			"-S", "--sdb", action="store", metavar="DB_NAME",
+			help="Name of the database returned by the `list-site-dbs` command."
+		)
+		subparser.add_argument(
+			"--dbpath", action="store", metavar="DB_PATH", type=pathlib.Path,
+			help="Use database file with the the given path.")
+		subparser.add_argument(
+			"--userctx", action="store",
+			help="Use given user context (“Firefox container”) when determining the "
+			     "database path."
+		)
+		subparser.add_argument(
+			"key_name", metavar="KEY", default="@", nargs="?",
+			help="JMESPath of the key to query."
+		)
+	
 	subparser_read = subparsers.add_parser(
 		"read", help="Reads a value (possibly containing further values) belonging "
-		             "to the specified site or extension.")
-	subparser_read.set_defaults(handler=handle_read)
+		             "to the specified site or extension in a faithful "
+		             "representation that is NOT VALID JSON.")
+	subparser_read.set_defaults(handler=handle_read, output="full")
+	add_read_args(subparser_read)
 	
-	subparser_read.add_argument(
-		"-x", "--extension", action="store", metavar="EXT_ID",
-		help="Use database of the extension with the given Extension ID."
-	)
-	subparser_read.add_argument(
-		"-s", "--site", action="store", metavar="SITE_NAME",
-		help="Name of the site returned by the `list-sites` command."
-	)
-	subparser_read.add_argument(
-		"-S", "--sdb", action="store", metavar="DB_NAME",
-		help="Name of the database returned by the `list-site-dbs` command."
-	)
-	subparser_read.add_argument(
-		"--dbpath", action="store", metavar="DB_PATH", type=pathlib.Path,
-		help="Use database file with the the given path.")
-	subparser_read.add_argument(
-		"--userctx", action="store",
-		help="Use given user context (“Firefox container”) when determining the "
-		     "database path."
-	)
-	subparser_read.add_argument(
-		"key_name", metavar="KEY", default="@", nargs="?",
-		help="JMESPath of the key to query."
-	)
+	subparser_read_json = subparsers.add_parser(
+		"read-json", help="Reads a value (possibly containing further values) belonging "
+		                  "to the specified site or extension in a reduced "
+		                  "JSON-compatible representation missing some details.")
+	subparser_read_json.set_defaults(handler=handle_read, output="json")
+	add_read_args(subparser_read_json)
+	
+
 	
 	# Parse command-line arguments using `argparse`
 	args = parser.parse_args(argv)

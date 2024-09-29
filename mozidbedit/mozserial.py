@@ -172,6 +172,10 @@ class JSRegExpObj:
 	def __repr__(self) -> str:
 		return f"new RegExp({self.expr!r}, {self.flags!r})"
 
+	def __str__(self) -> str:
+		escaped_expr = self.expr.replace("/", "\\/")
+		return f"/{escaped_expr!s}/{self.flags!s}"
+
 
 class JSSavedFrame:
 	def __init__(self):
@@ -516,7 +520,7 @@ class Reader:
 			if tag2 != DataType.STRING:
 				raise ParseError("RegExp type must be followed by string")
 
-			return True, JSRegExpObj(flags, self.read_string(data2))
+			return True, JSRegExpObj(self.read_string(data2), flags)
 
 		elif tag == DataType.ARRAY_OBJECT:
 			obj = []
