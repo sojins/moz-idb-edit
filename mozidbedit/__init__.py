@@ -315,56 +315,89 @@ def discover_idbs(sitebase):
 	return dbs
 
 
-def main(argv=sys.argv[1:], program=sys.argv[0]):
-	parser = argparse.ArgumentParser(description=__doc__, prog=pathlib.Path(program).name)
-	parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
-	parser.add_argument("-x", "--extension", action="store", metavar="EXT_ID",
-	                    help="Use database of the extension with the given Extension ID.")
-	parser.add_argument("--list-extensions", action="store_true",
-	                    help="List all known extensions in the profile directory.")
-	parser.add_argument("--list-sites", action="store_true",
-	                    help="List all site databases in the profile directory.")
-	parser.add_argument("-s", "--site", action="store", metavar="SITE_NAME",
-	                    help="Use database of the site with the given name.")
-	parser.add_argument("-S", "--sdb", action="store", metavar="DB_NAME",
-	                    help="Use database with the given name (omit to list) below a site.")
-	parser.add_argument("--dbpath", action="store", metavar="DB_PATH", type=pathlib.Path,
-	                    help="Use database file with the the given path.")
-	parser.add_argument("--userctx", action="store",
-	                    help="Use given user context (“Firefox container”) "
-	                         "when determining the database path.")
-	parser.add_argument("-profile", "--profile", metavar="PROFILE", type=pathlib.Path,
-	                    help="Path to the Firefox/MozTK application profile directory.")
-	parser.add_argument("key_name", metavar="KEY", default="@", nargs="?",
-	                    help="JMESPath of the key to query.")
+def resolve_profile_dir(
+		parser: argparse.ArgumentParser,
+		args: argparse.Namespace,
+) -> ty.Tuple[pathlib.Path, pathlib.Path]:
+	if args.profile:
+		return args.profile, args.profile / "storage" / "default"
+	
+	profile_path: ty.Optional[pathlib.Path] = find_default_profile_dir()
+	if not profile_path or not profile_path.exists():
+		parser.error("Could not determine default Firefox profile, pass --profile")
+	return profile_path, profile_path / "storage" / "default"
 
-	args = parser.parse_args(argv)
 
-	if int(bool(args.dbpath)) + int(bool(args.extension)) + int(args.list_extensions) + int(args.list_sites) + int(bool(args.site)) != 1:
-		parser.error("Exactly one of --dbpath, --extension, --list-sites or --site must be used")
-		return 1
+def handle_list_extensions(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+	profile_path, _ = resolve_profile_dir(parser, args)
+	
+	for ext_id, ext_name in sorted(find_ext_info(profile_path)):
+			print("--extension", shlex.quote(ext_id), " #", ext_name)
+	return 0
 
-	if args.sdb and not args.site:
-		parser.error("--sdb requires --site")
-		return 1
 
-	profile_path: ty.Optional[pathlib.Path] = args.profile
+def handle_list_sites(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+	profile_path, storage_path = resolve_profile_dir(parser, args)
+	
+	# Add sites to list first, so that we can apply sorting before
+	# printing them
+	sites = []
+	for dirpath in storage_path.iterdir():
+		if dirpath.name.startswith("moz-extension") or "+++" not in dirpath.name:
+			# Extensions have special handling, so skip them here
+			continue
+		
+		if not (dirpath / "idb").is_dir():
+			# Skip sites not having any indexed IB stored
+			continue
+		
+		encoded_origin, ctx_name = dirpath.name, ""
+		if "^userContextId=" in encoded_origin:
+			encoded_origin, ctx_name = encoded_origin.split("^userContextId=", 1)
+			try:
+				ctx_id = int(ctx_name)
+			except ValueError:
+				pass  # Keep invalid context IDs as-is
+			else:
+				try:
+					ctx_name = find_context_name_by_id(profile_path, ctx_id)
+				except KeyError:
+					pass  # Also keep unknown context IDs as-is
+		
+		scheme, netloc = encoded_origin.split("+++", 1)
+		if scheme == "file":
+			netloc = netloc.replace("+", "/")
+		else:
+			netloc = netloc.replace("+", ":")
+		origin = scheme + "://" + netloc
+		
+		dbs = list(discover_idbs(storage_path / dirpath.name / "idb"))
+		sites.append((origin, ctx_name, dbs))
+	sites.sort()
+	
+	# Print sorted list of sites with their user-context if applicable
+	for origin, ctx_name, dbs in sites:
+		for db_name in dbs:
+			if ctx_name:
+				print("--site", shlex.quote(origin), "--userctx", shlex.quote(ctx_name),
+				      "--sdb", shlex.quote(db_name))
+			else:
+				print("--site", shlex.quote(origin), "--sdb", shlex.quote(db_name))
+	
+	return 0
+
+
+def handle_read(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+	profile_path, storage_path = resolve_profile_dir(parser, args)
 	db_path: ty.Optional[pathlib.Path] = args.dbpath
-
-	if (args.extension or args.list_extensions or args.list_sites or args.site) and not profile_path:
-		profile_path = find_default_profile_dir()
-		if not profile_path or not profile_path.exists():
-			parser.error("Could not determine default Firefox profile, pass --profile")
-			return 1
-
+	
 	ctx_id = 0  # Use default
 	if args.userctx:
 		try:
 			ctx_id = int(args.userctx)
 		except ValueError:
 			ctx_id = find_context_id_by_name(profile_path, args.userctx)
-
-
+	
 	# Collect required extra data for figuring out extension paths
 	if args.extension:
 		# Map extension ID to browser internal UUID
@@ -372,89 +405,29 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 		if ext_uuid is None:
 			print(f"Failed to look up internal UUID for extension ID: {ext_uuid} (is the extension installed?)", file=sys.stderr)
 			return 1
-
+		
 		# Use special extension storage ID if no other was set
 		if args.userctx is None:
 			ctx_id = find_context_id_by_name(profile_path, USER_CONTEXT_WEB_EXT)
-
+		
 		origin_label = f"moz-extension+++{ext_uuid}"
-
+		
 		if not db_path:
 			if ctx_id:
 				origin_label += f"^userContextId={ctx_id}"
-
+			
 			db_path = profile_path / "storage" / "default" / origin_label
 			db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
-	elif args.list_extensions:
-		for ext_id, ext_name in sorted(find_ext_info(profile_path)):
-			print("--extension", shlex.quote(ext_id), " #", ext_name)
-
-		return 0
-	elif args.list_sites or args.site:
-		storagebase = profile_path / "storage" / "default"
-		
-		if args.list_sites:
-			# Add sites to list first, so that we can apply sorting before
-			# printing them
-			sites = []
-			for dirpath in storagebase.iterdir():
-				if dirpath.name.startswith("moz-extension") or "+++" not in dirpath.name:
-					# Extensions have special handling, so skip them here
-					continue
-				
-				if not (dirpath / "idb").is_dir():
-					# Skip sites not having any indexed IB stored
-					continue
-				
-				encoded_origin, ctx_name = dirpath.name, ""
-				if "^userContextId=" in encoded_origin:
-					encoded_origin, ctx_name = encoded_origin.split("^userContextId=", 1)
-					try:
-						ctx_id = int(ctx_name)
-					except ValueError:
-						pass  # Keep invalid context IDs as-is
-					else:
-						try:
-							ctx_name = find_context_name_by_id(profile_path, ctx_id)
-						except KeyError:
-							pass  # Also keep unknown context IDs as-is
-				
-				scheme, netloc = encoded_origin.split("+++", 1)
-				if scheme == "file":
-					netloc = netloc.replace("+", "/")
-				else:
-					netloc = netloc.replace("+", ":")
-				origin = scheme + "://" + netloc
-				
-				sites.append((origin, ctx_name))
-			sites.sort()
-			
-			# Print sorted list of sites with their user-context if applicable
-			for origin, ctx_name in sites:
-				if ctx_name:
-					print("--site", shlex.quote(origin), "--userctx", shlex.quote(ctx_name))
-				else:
-					print("--site", shlex.quote(origin))
-
-			return 0
-
+	elif args.site:
 		site_name = args.site.replace(":", "+").replace("/", "+")
 		if ctx_id != 0:
 			site_name += f"^userContextId={ctx_id}"
-
-		site_base = storagebase / site_name / "idb"
+		
+		site_base = storage_path / site_name / "idb"
 		if not site_base.is_dir():
 			parser.error("Invalid --site given (pass --list-sites to list)")
 			return 1
-
-		# list site databases?
-		if not args.sdb:
-			dbs = discover_idbs(site_base)
-			for db_name in sorted(dbs.keys()):
-				print("--sdb", shlex.quote(db_name))
-				print("--sdb", shlex.quote(dbs[db_name].name))
-			return 0
-
+		
 		db_path = site_base / args.sdb
 		if not db_path.is_file():
 			dbs = discover_idbs(site_base)
@@ -465,14 +438,84 @@ def main(argv=sys.argv[1:], program=sys.argv[0]):
 	else:
 		if not db_path.is_file():
 			parser.error("Invalid --dbpath given")
-
+	
 	print(f"Using database path: {db_path}", file=sys.stderr)
-
+	
 	with mozidb.IndexedDB(db_path) as conn:
 		pretty_printer = PrettyPrinter()
 		pretty_printer.pprint(jmespath.search(args.key_name, IDBObjectWrapper(conn)))
-
+	
 	return 0
+
+
+def main(argv=sys.argv[1:], program=sys.argv[0]) -> int:
+	# Global parameters
+	parser = argparse.ArgumentParser(description=__doc__, prog=pathlib.Path(program).name)
+	parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
+	parser.add_argument("-profile", "--profile", metavar="PROFILE", type=pathlib.Path,
+	                    help="Path to the Firefox/MozTK application profile directory.")
+	
+	# Specific parser actions:
+	subparsers = parser.add_subparsers(required=True)
+	
+	#  → List all extensions in profile directory
+	subparser_lexts = subparsers.add_parser(
+		"list-extensions", help="Lists all known extensions in the profile directory."
+	)
+	subparser_lexts.set_defaults(handler=handle_list_extensions)
+	
+	#  → List all websites in profile directory
+	subparser_lsites = subparsers.add_parser(
+		"list-sites", help="Lists all sites in the profile directory with their IDBs."
+	)
+	subparser_lsites.set_defaults(handler=handle_list_sites)
+	
+	#  → Read value(s)
+	subparser_read = subparsers.add_parser(
+		"read", help="Reads a value (possibly containing further values) belonging "
+		             "to the specified site or extension.")
+	subparser_read.set_defaults(handler=handle_read)
+	
+	subparser_read.add_argument(
+		"-x", "--extension", action="store", metavar="EXT_ID",
+		help="Use database of the extension with the given Extension ID."
+	)
+	subparser_read.add_argument(
+		"-s", "--site", action="store", metavar="SITE_NAME",
+		help="Name of the site returned by the `list-sites` command."
+	)
+	subparser_read.add_argument(
+		"-S", "--sdb", action="store", metavar="DB_NAME",
+		help="Name of the database returned by the `list-site-dbs` command."
+	)
+	subparser_read.add_argument(
+		"--dbpath", action="store", metavar="DB_PATH", type=pathlib.Path,
+		help="Use database file with the the given path.")
+	subparser_read.add_argument(
+		"--userctx", action="store",
+		help="Use given user context (“Firefox container”) when determining the "
+		     "database path."
+	)
+	subparser_read.add_argument(
+		"key_name", metavar="KEY", default="@", nargs="?",
+		help="JMESPath of the key to query."
+	)
+	
+	# Parse command-line arguments using `argparse`
+	args = parser.parse_args(argv)
+	
+	# Special condition checking: Mutual dependency between --sdb and --site
+	if args.handler is handle_read:
+		if args.sdb and not args.site:
+			parser.error("argument --site is required when using --sdb")
+			return 1
+		
+		if args.site and not args.sdb:
+			parser.error("argument --sdb is required when using --site")
+			return 1
+	
+	# Dispatch to handler (calls the `.set_defaults(handler=…)` from above)
+	return args.handler(parser, args)
 
 
 if __name__ == "__main__":
