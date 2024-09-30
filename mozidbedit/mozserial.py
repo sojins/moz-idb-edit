@@ -576,4 +576,4 @@ class Reader:
 			return False, self.read_typed_array(tag - DataType.TYPED_ARRAY_V1_MIN, data)
 
 		else:
-			raise ParseError("Unsupported type")
+			raise ParseError(f"Unsupported type: 0x{tag:X}")
