@@ -83,12 +83,24 @@ def read_user_contexts(profile_dir: pathlib.Path):
 		return 4294967295
 
 
+@ty.overload
 def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str) -> ty.Optional[str]:
+	...
+
+@ty.overload
+def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: ty.Iterable[str]) -> ty.List[ty.Optional[str]]:
+	...
+
+def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str | ty.Iterable[str]) \
+    -> ty.Optional[str] | ty.List[ty.Optional[str]]:
 	for name, value in read_user_prefs(profile_dir / "prefs.js"):
 		if name == "extensions.webextensions.uuids":
 			try:
 				value = json.loads(value)
-				return value.get(ext_id, None)
+				if not isinstance(ext_id, str):
+					return [value.get(x, None) for x in ext_id]
+				else:
+					return value.get(ext_id, None)
 			except ValueError:
 				pass
 
@@ -369,9 +381,18 @@ def resolve_profile_dir(
 
 
 def handle_list_extensions(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
-	profile_path, _ = resolve_profile_dir(parser, args)
+	profile_path, storage_path = resolve_profile_dir(parser, args)
 	
-	for ext_id, ext_name in sorted(find_ext_info(profile_path)):
+	# Special extension storage ID
+	ctx_id = find_context_id_by_name(profile_path, USER_CONTEXT_WEB_EXT)
+	
+	ext_infos = sorted(find_ext_info(profile_path))
+	ext_uuids = find_uuid_by_ext_id(profile_path, map(lambda x: x[0], ext_infos))
+	
+	for (ext_id, ext_name), ext_uuid in zip(ext_infos, ext_uuids):
+		db_path = storage_path / f"moz-extension+++{ext_uuid}^userContextId={ctx_id}"
+		db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
+		if db_path.exists():
 			print("--extension", shlex.quote(ext_id), " #", ext_name)
 	return 0
 
@@ -447,7 +468,7 @@ def handle_read(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
 			return 1
 		
 		# Use special extension storage ID if no other was set
-		if args.userctx is None:
+		if userctx == 0:
 			ctx_id = find_context_id_by_name(profile_path, USER_CONTEXT_WEB_EXT)
 		
 		origin_label = f"moz-extension+++{ext_uuid}"
@@ -456,7 +477,7 @@ def handle_read(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
 			if ctx_id:
 				origin_label += f"^userContextId={ctx_id}"
 			
-			db_path = profile_path / "storage" / "default" / origin_label
+			db_path = storage_path / origin_label
 			db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
 	elif args.site:
 		site_name = args.site.replace(":", "+").replace("/", "+")
