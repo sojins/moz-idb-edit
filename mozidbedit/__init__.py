@@ -28,6 +28,12 @@ __dir__ = pathlib.Path(__file__).parent
 __version__ = importlib.metadata.version("moz-idb-edit")
 
 
+#HACK: Make `IDBObjectWrapper` be considered a JavaScript Object type in JMESPath
+import jmespath.functions
+jmespath.functions.TYPES_MAP["IDBObjectWrapper"] = "object"
+jmespath.functions.REVERSE_TYPES_MAP["object"] += ("IDBObjectWrapper",)
+
+
 USER_CONTEXT_WEB_EXT = "userContextIdInternal.webextStorageLocal"
 
 
