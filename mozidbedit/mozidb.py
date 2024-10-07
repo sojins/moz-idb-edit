@@ -261,7 +261,11 @@ class IndexedDB(sqlite3.Connection):
 
 	def __init__(self, dbpath: ty.Union[os.PathLike, str, bytes]):
 		super().__init__(dbpath)
-		self.files_dir = pathlib.Path(os.fsdecode(dbpath).removesuffix(".sqlite") + ".files")
+		try:
+			self.files_dir = pathlib.Path(os.fsdecode(dbpath).removesuffix(".sqlite") + ".files")
+		except:
+			xpath = os.fsdecode(dbpath).replace(".sqlite",".files")
+			self.files_dir = pathlib.Path(xpath)
 
 	def get_name(self):
 		cur = self.cursor()

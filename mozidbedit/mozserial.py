@@ -409,7 +409,7 @@ class Reader:
 			# For a Map, store those <key,value> pairs in the contained map
 			# data structure.
 			if isinstance(obj, JSMapObj):
-				obj[key] = value
+				obj[key] = val
 			else:
 				if not isinstance(key, (str, int)):
 					raise ParseError("JavaScript object key must be a string or integer")
@@ -475,6 +475,33 @@ class Reader:
 		else:
 			return self.input.read_bytes(length * 2).decode("utf-16le")
 
+	def read_array_buffer(self, info: bytes) -> list: # by Kate
+		length = info & 0x7FFFFFFF
+		result = self.input.read_bytes(length=length)
+		return [str(result)]
+	
+	def read_typed_array(self, _type, info: bytes):  #XXX: TODO by Kate
+		length = info & 0x7FFFFFFF
+		array_type = _type | 0xFFFF0000
+		results = []
+		for x in range(length):
+			len2 = self.input.read()
+			len2 = len2 & 0x7FFFFFFF
+			result = ""
+			if len2 == 0:
+				break
+			if array_type == DataType.NULL:
+				result = (self.input.read_bytes(length=len2))
+			elif array_type == DataType.UNDEFINED:
+				result = (self.input.read_bytes(length=len2))
+			elif array_type == DataType.BOOLEAN:
+				result = (self.input.read_bytes(length=len2))
+			elif array_type == DataType.INT32:
+				result = (self.input.read_bytes(length=len2))
+			elif array_type == DataType.STRING:
+				result = (self.read_string(len2))
+			results.append(str(result))
+		return results
 
 	def start_read(self):
 		tag, data = self.input.read_pair()
@@ -483,7 +510,7 @@ class Reader:
 			return False, None
 
 		elif tag == DataType.UNDEFINED:
-			return False, NotImplemented
+			return False, None # NotImplemented
 
 		elif tag == DataType.INT32:
 			if data > 0x7FFFFFFF:

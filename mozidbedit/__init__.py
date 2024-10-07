@@ -19,7 +19,7 @@ import shlex
 import sys
 import typing as ty
 
-import jmespath
+# import jmespath
 
 from . import mozidb
 from . import mozserial
@@ -28,10 +28,10 @@ __dir__ = pathlib.Path(__file__).parent
 __version__ = importlib.metadata.version("moz-idb-edit")
 
 
-#HACK: Make `IDBObjectWrapper` be considered a JavaScript Object type in JMESPath
-import jmespath.functions
-jmespath.functions.TYPES_MAP["IDBObjectWrapper"] = "object"
-jmespath.functions.REVERSE_TYPES_MAP["object"] += ("IDBObjectWrapper",)
+# #HACK: Make `IDBObjectWrapper` be considered a JavaScript Object type in JMESPath
+# import jmespath.functions
+# jmespath.functions.TYPES_MAP["IDBObjectWrapper"] = "object"
+# jmespath.functions.REVERSE_TYPES_MAP["object"] += ("IDBObjectWrapper",)
 
 
 USER_CONTEXT_WEB_EXT = "userContextIdInternal.webextStorageLocal"
@@ -91,8 +91,10 @@ def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str) -> ty.Optional[s
 def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: ty.Iterable[str]) -> ty.List[ty.Optional[str]]:
 	...
 
-def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str | ty.Iterable[str]) \
-    -> ty.Optional[str] | ty.List[ty.Optional[str]]:
+# def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str | ty.Iterable[str]) \
+#     -> ty.Optional[str] | ty.List[ty.Optional[str]]:
+def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str) \
+    -> ty.Optional[str]:
 	for name, value in read_user_prefs(profile_dir / "prefs.js"):
 		if name == "extensions.webextensions.uuids":
 			try:
@@ -360,7 +362,8 @@ def to_json(obj):
 		return [to_json(item) for item in obj]
 	elif isinstance(obj, collections.abc.Mapping):
 		return {
-			json.dumps(to_json(key)): to_json(value)
+			# json.dumps
+			(to_json(key)): to_json(value)
 			for key, value in obj.items()
 			if value is not NotImplemented  # skip `undefined` values entirely
 		}
@@ -504,13 +507,13 @@ def handle_read(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
 	
 	print(f"Using database path: {db_path}", file=sys.stderr)
 	
-	with mozidb.IndexedDB(db_path) as conn:
-		value = jmespath.search(args.key_name, IDBObjectWrapper(conn))
-		if args.output == "full":
-			pretty_printer = PrettyPrinter()
-			pretty_printer.pprint(value)
-		else:  # JSON
-			json.dump(to_json(value), sys.stdout, ensure_ascii=False, indent="\t")
+	# with mozidb.IndexedDB(db_path) as conn:
+	# 	value = jmespath.search(args.key_name, IDBObjectWrapper(conn))
+	# 	if args.output == "full":
+	# 		pretty_printer = PrettyPrinter()
+	# 		pretty_printer.pprint(value)
+	# 	else:  # JSON
+	# 		json.dump(to_json(value), sys.stdout, ensure_ascii=False, indent="\t")
 	
 	return 0
 
@@ -521,7 +524,7 @@ def main(argv=sys.argv[1:], program=sys.argv[0]) -> int:
 	parser.add_argument("-V", "--version", action="version", version="%(prog)s {0}".format(__version__))
 	parser.add_argument("-profile", "--profile", metavar="PROFILE", type=pathlib.Path,
 	                    help="Path to the Firefox/MozTK application profile directory.")
-	
+
 	# Specific parser actions:
 	subparsers = parser.add_subparsers(required=True)
 	
