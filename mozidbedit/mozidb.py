@@ -19,8 +19,8 @@ import time
 import typing as ty
 
 from . import mozserial
-from . import mozsnappy
-
+# from . import mozsnappy
+from . import ccl_simplesnappy
 
 class KeyType(enum.IntEnum):
 	TERMINATOR = 0
@@ -272,8 +272,11 @@ class IndexedDB(sqlite3.Connection):
 		return result[0]
 
 	def read_object(self, key_name: object) -> object:
-		key = KeyCodec.encode(key_name)
-
+		if isinstance(key_name, bytes):
+			key = key_name
+		else:
+			key = KeyCodec.encode(key_name)
+			
 		# Query data
 		cur = self.cursor()
 		cur.execute("SELECT data, file_ids FROM object_data WHERE key=?", (key,))
@@ -286,16 +289,17 @@ class IndexedDB(sqlite3.Connection):
 
 		# Parse data
 		if file_ids is None:
-			decompressed = mozsnappy.decompress_raw(data)
+			# decompressed = mozsnappy.decompress_raw(data)			
+			decompressed = ccl_simplesnappy.decompress(io.BytesIO(data))
 			reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
 			return reader.read()
 		else:
 			#FIXME: Figure out the actual format of `file_ids`
 			assert file_ids.startswith(".") and file_ids.removeprefix(".").isnumeric()
 
-			with open(self.files_dir / file_ids.removeprefix("."), "rb") as file:
-				reader = mozserial.Reader(io.BufferedReader(mozsnappy.Decompressor(file)))
-				return reader.read()
+			# with open(self.files_dir / file_ids.removeprefix("."), "rb") as file:
+			# 	reader = mozserial.Reader(io.BufferedReader(mozsnappy.Decompressor(file)))
+			# 	return reader.read()
 
 	def read_objects(self) -> ty.Dict[object, object]:
 		items = {}
@@ -310,19 +314,22 @@ class IndexedDB(sqlite3.Connection):
 
 			# Parse data
 			if file_ids is None:
-				decompressed = mozsnappy.decompress_raw(data)
+				# decompressed = mozsnappy.decompress_raw(data)
+				decompressed = ccl_simplesnappy.decompress(io.BytesIO(data))
 				reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
 				content = reader.read()
 			else:
 				#FIXME: Figure out the actual format of `file_ids`
 				assert file_ids.startswith(".") and file_ids.removeprefix(".").isnumeric()
 
-				with open(self.files_dir / file_ids.removeprefix("."), "rb") as file:
-					reader = mozserial.Reader(io.BufferedReader(mozsnappy.Decompressor(file)))
-					content = reader.read()
-					print(content)
-
-			items[KeyCodec.decode(key_name)] = content
+				# with open(self.files_dir / file_ids.removeprefix("."), "rb") as file:
+				# 	reader = mozserial.Reader(io.BufferedReader(mozsnappy.Decompressor(file)))
+				# 	content = reader.read()
+				# 	print(content)
+			try:
+				items[KeyCodec.decode(key_name)] = content
+			except:
+				items[key_name.hex()] = content
 
 			result = cur.fetchone()
 
@@ -336,7 +343,10 @@ class IndexedDB(sqlite3.Connection):
 		cur.execute("SELECT key FROM object_data")
 		result = cur.fetchone()
 		while result is not None:
-			key_names.append(KeyCodec.decode(result[0]))
+			try:
+				key_names.append(KeyCodec.decode(result[0]))
+			except:
+				key_names.append(result[0])
 			result = cur.fetchone()
 
 		return key_names

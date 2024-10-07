@@ -107,7 +107,9 @@ def find_uuid_by_ext_id(profile_dir: pathlib.Path, ext_id: str | ty.Iterable[str
 def find_ext_info(profile_dir: pathlib.Path) -> ty.Iterator[ty.Tuple[str, str]]:
 	with open(profile_dir / "extensions.json", "rb") as f:
 		ext_data = json.load(f)
-	assert ext_data.get("schemaVersion") == 36
+	assert ext_data.get("schemaVersion") in [36, 33]
+	if not ext_data.get("addons"):
+		return
 
 	for extension in ext_data["addons"]:
 		yield extension["id"], extension["defaultLocale"]["name"]
@@ -372,12 +374,12 @@ def resolve_profile_dir(
 		args: argparse.Namespace,
 ) -> ty.Tuple[pathlib.Path, pathlib.Path]:
 	if args.profile:
-		return args.profile, args.profile / "storage" / "default"
+		return args.profile, args.profile / "storage" / "permanent" #"default"
 	
 	profile_path: ty.Optional[pathlib.Path] = find_default_profile_dir()
 	if not profile_path or not profile_path.exists():
 		parser.error("Could not determine default Firefox profile, pass --profile")
-	return profile_path, profile_path / "storage" / "default"
+	return profile_path, profile_path / "storage" / "permanent" #"default"
 
 
 def handle_list_extensions(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
@@ -388,7 +390,7 @@ def handle_list_extensions(parser: argparse.ArgumentParser, args: argparse.Names
 	
 	ext_infos = sorted(find_ext_info(profile_path))
 	ext_uuids = find_uuid_by_ext_id(profile_path, map(lambda x: x[0], ext_infos))
-	
+
 	for (ext_id, ext_name), ext_uuid in zip(ext_infos, ext_uuids):
 		db_path = storage_path / f"moz-extension+++{ext_uuid}^userContextId={ctx_id}"
 		db_path = db_path / "idb" / "3647222921wleabcEoxlt-eengsairo.sqlite"
