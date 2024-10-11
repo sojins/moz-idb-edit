@@ -261,6 +261,22 @@ class DataType(enum.IntEnum):
 	TRANSFER_MAP_STORED_ARRAY_BUFFER = 0xFFFF0203
 
 
+	# by Kate
+	# https://searchfox.org/mozilla-central/source/dom/base/StructuredCloneTags.h#24
+	JS_SCTAG_USER_MIN     = 0xFFFF8000
+	JS_SCTAG_USER_MAX     = 0xFFFFFFFF
+	SCTAG_BASE            = JS_SCTAG_USER_MIN + 0
+	SCTAG_DOM_BLOB        = SCTAG_BASE + 1
+	SCTAG_DOM_FILE_WITHOUT_LASTMODIFIEDDATE = SCTAG_BASE + 2
+	SCTAG_DOM_FILELIST    = SCTAG_BASE + 3
+	SCTAG_DOM_MUTABLEFILE = SCTAG_BASE + 4
+	SCTAG_DOM_FILE        = SCTAG_BASE + 5
+	SCTAG_DOM_WASM_MODULE = SCTAG_BASE + 6
+	SCTAG_DOM_IMAGEDATA   = SCTAG_BASE + 7
+	SCTAG_DOM_DOMPOINT    = SCTAG_BASE + 8
+	SCTAG_DOM_DOMPOINTREADONLY  = SCTAG_BASE + 9
+	SCTAG_DOM_CRYPTOKEY   = SCTAG_BASE + 10
+
 class RegExpFlag(enum.IntFlag):
 	IGNORE_CASE = 0b00001
 	GLOBAL      = 0b00010
@@ -602,5 +618,21 @@ class Reader:
 		elif DataType.TYPED_ARRAY_V1_MIN <= tag <= DataType.TYPED_ARRAY_V1_MAX:
 			return False, self.read_typed_array(tag - DataType.TYPED_ARRAY_V1_MIN, data)
 
+		elif tag in [DataType.SCTAG_DOM_BLOB, DataType.SCTAG_DOM_FILE, DataType.SCTAG_DOM_FILE_WITHOUT_LASTMODIFIEDDATE]:
+			size = struct.unpack("Q",self.input.read_bytes(8))[0]
+			type_len = struct.unpack("I",self.input.read_bytes(4))[0]
+			type_str = self.input.read_bytes(type_len)
+			if tag == DataType.SCTAG_DOM_BLOB:
+				return True, type_str.decode('utf-8')
+
+			if tag == DataType.SCTAG_DOM_FILE_WITHOUT_LASTMODIFIEDDATE:
+				last_modified = -1
+				return True, last_modified
+			else:
+				last_modified = struct.unpack("Q",self.input.read_bytes(8))[0]
+			if tag == DataType.SCTAG_DOM_FILE:
+				name_len = struct.unpack("I",self.input.read_bytes(4))[0]
+				name = self.input.read_bytes(name_len)
+				return True, name.decode('utf-8')
 		else:
 			raise ParseError(f"Unsupported type: 0x{tag:X}")

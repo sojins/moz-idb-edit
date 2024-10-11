@@ -12,7 +12,7 @@ def read_objects(sitebase):
             db_name = conn.get_name()
             if db_name is not None:
                 dbs[db_name] = db_path
-            # if db_name not in ["alarms"]: #"sms", "places_idb_store"]: #"pushapi", "places_idb_store", "sms"]:
+            # if db_name not in ["sms"]: #["alarms"]: #"sms", "places_idb_store"]: #"pushapi", "places_idb_store", "sms"]:
             #     continue
             try:
                 conn.execute('alter table object_data add column json_data TEXT')
@@ -21,35 +21,40 @@ def read_objects(sitebase):
             items = conn.list_objects()
             update_data_bin = []
             update_data_text = []
-            for key in items:
-                try:
-                    obj = conn.read_object(key_name=key)
-                    if not obj:
-                        continue
+            # for key in items:
+            for object_store_id, item_array in items.items():
+                for key in item_array:
+                    # if key != b'\x10\xc0\x20': #if key != b'\x10\xc0\x63':
+                    #     continue
                     try:
-                        value = json.dumps(obj)
-                    except Exception as ne:
-                        value = json.dumps(to_json(obj))
-                        # print(ne)
-                        # continue
-                    if type(key) == str:
-                        _key = mozidb.KeyCodec.encode(key)
-                        update_data_text.append((value, _key))
-                    else:
-                        update_data_bin.append((value, key))
-                except Exception as e:
-                    print(e)
-                    pass
-                obj = None
-                value = ''
+                        obj = conn.read_object(key_name=key, object_store_id=object_store_id)
+                        if not obj:
+                            value = ''
+                            continue
+                        try:
+                            value = json.dumps(obj)
+                        except Exception as ne:
+                            value = json.dumps(to_json(obj))
+                            # print(ne)
+                            # continue
+                        if type(key) == str:
+                            _key = mozidb.KeyCodec.encode(key)
+                            update_data_text.append((value, _key, object_store_id))
+                        else:
+                            update_data_bin.append((value, key, object_store_id))
+                    except Exception as e:
+                        print(e)
+                        pass
+                    obj = None
+                    value = ''
             try:
                 if len(update_data_bin) > 0:
                     conn.executemany('''
-                                    UPDATE object_data set json_data = ? WHERE key = ?''',
+                                    UPDATE object_data set json_data = ? WHERE key = ? and object_store_id=?''',
                                     update_data_bin)
                 if len(update_data_text) > 0:
                     conn.executemany('''
-                                    UPDATE object_data set json_data = ? WHERE key like ?''',
+                                    UPDATE object_data set json_data = ? WHERE key like ? and object_store_id=?''',
                                     update_data_text)
             except Exception as e:
                 print(e)

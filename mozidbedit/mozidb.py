@@ -275,7 +275,7 @@ class IndexedDB(sqlite3.Connection):
 			return None
 		return result[0]
 
-	def read_object(self, key_name: object) -> object:
+	def read_object(self, key_name: object, object_store_id=None) -> object:
 		if isinstance(key_name, bytes):
 			key = key_name
 		else:
@@ -283,7 +283,10 @@ class IndexedDB(sqlite3.Connection):
 			
 		# Query data
 		cur = self.cursor()
-		cur.execute("SELECT data, file_ids FROM object_data WHERE key=?", (key,))
+		if object_store_id:
+			cur.execute("SELECT data, file_ids FROM object_data WHERE key=? and object_store_id=?", (key,object_store_id))
+		else:
+			cur.execute("SELECT data, file_ids FROM object_data WHERE key=?", (key,))
 		result = cur.fetchone()
 		if result is None:
 			raise KeyError(key_name)
@@ -298,12 +301,17 @@ class IndexedDB(sqlite3.Connection):
 			reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
 			return reader.read()
 		else:
-			#FIXME: Figure out the actual format of `file_ids`
-			assert file_ids.startswith(".") and file_ids.removeprefix(".").isnumeric()
+			# try:
+			# 	#FIXME: Figure out the actual format of `file_ids`
+			# 	assert file_ids.startswith(".") and file_ids.removeprefix(".").isnumeric()
+			# # with open(self.files_dir / file_ids.removeprefix("."), "rb") as file:
+			# # 	reader = mozserial.Reader(io.BufferedReader(mozsnappy.Decompressor(file)))
+			# # 	return reader.read()
+			# except: pass
+			decompressed = ccl_simplesnappy.decompress(io.BytesIO(data))
+			reader = mozserial.Reader(io.BufferedReader(io.BytesIO(decompressed)))
+			return reader.read()
 
-			# with open(self.files_dir / file_ids.removeprefix("."), "rb") as file:
-			# 	reader = mozserial.Reader(io.BufferedReader(mozsnappy.Decompressor(file)))
-			# 	return reader.read()
 
 	def read_objects(self) -> ty.Dict[object, object]:
 		items = {}
@@ -340,20 +348,25 @@ class IndexedDB(sqlite3.Connection):
 		return items
 
 	def list_objects(self) -> ty.List[object]:
-		key_names = []
+		store_id = {}
+		# key_names = []
 
 		# Query data
 		cur = self.cursor()
-		cur.execute("SELECT key FROM object_data")
+		cur.execute("SELECT key, object_store_id FROM object_data")
 		result = cur.fetchone()
 		while result is not None:
+			key_names = store_id.get(result[1])
+			if not key_names:
+				key_names = []
+				store_id[result[1]] = key_names
 			try:
 				key_names.append(KeyCodec.decode(result[0]))
 			except:
 				key_names.append(result[0])
 			result = cur.fetchone()
 
-		return key_names
+		return store_id
 
 	def count_objects(self) -> ty.List[object]:
 		# Query data
